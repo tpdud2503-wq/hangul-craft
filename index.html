@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>훈민정음 공방 - 한글 창제 원리 게임</title>
+  <!-- 구글 웹폰트: 한글 고서 및 명조 느낌의 Noto Serif KR & Gowun Batang -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="main-wrapper">
+    <!-- 헤더 -->
+    <header class="game-header">
+      <div class="seal-mark">訓民<br>正音</div>
+      <div class="header-titles">
+        <h1 class="main-title">집현전 한글 공방</h1>
+        <p class="sub-title">훈민정음 창제 원리(상형·가획·합성·병서) 복습 시험</p>
+      </div>
+      <div class="header-controls">
+        <button id="btn-show-qr" class="ctrl-btn qr-btn" title="학생들이 스마트폰으로 참여할 수 있는 QR코드 열기">📱 학생 참여 QR</button>
+        <button id="btn-team-dashboard" class="ctrl-btn team-board-btn" title="모둠별 실시간 완성 현황 및 순위 전광판">🏆 모둠 전광판</button>
+        <button id="btn-sound-toggle" class="ctrl-btn" title="배경음 및 효과음">🔊 소리 켜짐</button>
+        <button id="btn-open-guide" class="ctrl-btn primary-btn" title="훈민정음 해례본 도감 열기">📖 창제 도감</button>
+      </div>
+    </header>
+
+    <!-- 모둠 대항전 학생 선택 & 실시간 모둠 현황 바 -->
+    <section class="team-bar">
+      <div class="student-selector-group">
+        <span class="team-icon">🎓</span>
+        <label for="select-my-team" class="team-label">내 모둠:</label>
+        <select id="select-my-team" class="team-select"></select>
+
+        <label for="select-my-member" class="team-label">학생:</label>
+        <select id="select-my-member" class="team-select"></select>
+        
+        <span id="student-status-badge" class="student-status-chip solving">풀이 중</span>
+      </div>
+
+      <div class="team-quick-status">
+        <div class="room-indicator">
+          <span class="room-label">방 코드:</span>
+          <strong id="room-code-badge" class="room-badge" title="클릭하여 방 코드 복사">HG000</strong>
+          <span id="cloud-status-indicator" class="cloud-status-dot" title="클라우드 실시간 동기화 상태">연결중...</span>
+        </div>
+        <span class="quick-status-label">우리 모둠:</span>
+        <div id="team-progress-bar-container" class="quick-progress-track">
+          <div id="team-progress-bar" class="quick-progress-fill" style="width: 0%;"></div>
+        </div>
+        <span id="team-progress-text" class="quick-progress-text">0 / 3명 완료</span>
+        <button id="btn-team-settings" class="small-gear-btn" title="모둠 구성 설정">⚙️ 설정</button>
+      </div>
+    </section>
+
+    <!-- 스테이지 및 단어 선택 바 -->
+    <section class="stage-bar">
+      <div class="stage-info-group">
+        <label for="stage-select" class="stage-label">시험 과제:</label>
+        <select id="stage-select" class="stage-dropdown"></select>
+        <button id="btn-custom-word" class="action-small-btn">✏️ 직접 단어 입력</button>
+      </div>
+      <div class="stage-action-group">
+        <button id="btn-open-explanation" class="explanation-direct-btn" title="문제 해설 바로보기">💡 문제 해설 보기</button>
+        <button id="btn-toggle-hint" class="hint-toggle-btn">📜 훈수(힌트)</button>
+      </div>
+    </section>
+
+    <!-- 힌트 패널 (토글형) -->
+    <div id="hint-panel" class="hint-panel hidden">
+      <div class="hint-title">📜 집현전 학사의 훈수 (창제 비결)</div>
+      <div id="hint-content" class="hint-body"></div>
+    </div>
+
+    <!-- 문제 카드 & 현재 조립 상황 -->
+    <section class="quest-section">
+      <div class="quest-header">
+        <span id="stage-title" class="quest-chapter">제1장</span>
+        <p id="stage-desc" class="quest-desc">단어 설명</p>
+      </div>
+
+      <!-- 목표 단어 음절 카드 목록 -->
+      <div class="target-word-wrapper">
+        <div class="word-card-label">목표 단어 (글자를 눌러 선택):</div>
+        <div id="target-word-container" class="word-cards-flex"></div>
+      </div>
+
+      <!-- 음절 조립대 -->
+      <div class="syllable-assembly-board">
+        <div class="assembly-slot-item">
+          <div class="slot-header">초성 (첫소리)</div>
+          <div id="slot-cho" class="assembly-slot" title="클릭하여 지우기"></div>
+          <div class="slot-desc">자음 기본자·가획·병서</div>
+        </div>
+
+        <div class="assembly-plus">+</div>
+
+        <div class="assembly-slot-item">
+          <div class="slot-header">중성 (가운뎃소리)</div>
+          <div id="slot-jung" class="assembly-slot" title="클릭하여 지우기"></div>
+          <div class="slot-desc">삼재·초출·재출·합성</div>
+        </div>
+
+        <div class="assembly-plus">+</div>
+
+        <div class="assembly-slot-item">
+          <div class="slot-header">종성 (받침)</div>
+          <div id="slot-jong" class="assembly-slot" title="클릭하여 지우기"></div>
+          <div id="jong-required-hint" class="slot-desc">(받침 없음)</div>
+        </div>
+
+        <div class="assembly-equal">=</div>
+
+        <div class="assembly-slot-item preview-item">
+          <div class="slot-header">합자(合字) 결과</div>
+          <div id="active-char-preview" class="assembled-preview">?</div>
+          <div class="slot-desc">음절 완성 확인</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 메인 창제 작업대 -->
+    <main class="workbench-section">
+      <!-- 작업대 탭 (자음/모음) -->
+      <div class="workbench-tabs">
+        <button id="tab-consonant" class="tab-btn active">
+          <span class="tab-badge">초성·종성</span> 1. 자음 창제소 (가획·이체·병서)
+        </button>
+        <button id="tab-vowel" class="tab-btn">
+          <span class="tab-badge">중성</span> 2. 모음 창제소 (삼재·초출·재출·합성)
+        </button>
+      </div>
+
+      <!-- ==================== 자음 창제소 영역 ==================== -->
+      <div id="section-consonant" class="tab-content-panel">
+        <div class="panel-guide-text">
+          발음기관을 본뜬 <strong>5대 기본자(상형)</strong>를 선택한 뒤, <strong>[가획]·[병서]·[이체]</strong>로 새 글자를 빚어내세요.
+        </div>
+
+        <!-- 1. 기본자 선택 버튼들 (치설순아후) -->
+        <div class="basics-container">
+          <div class="group-title">자음 기본자 (상형의 원리):</div>
+          <div class="basics-grid">
+            <button class="c-basic-btn" data-char="ㄱ">
+              <span class="char-symbol">ㄱ</span>
+              <span class="char-meta"><strong>아음(어금닛소리)</strong><br>혀뿌리가 목구멍을 막음</span>
+            </button>
+            <button class="c-basic-btn" data-char="ㄴ">
+              <span class="char-symbol">ㄴ</span>
+              <span class="char-meta"><strong>설음(혓소리)</strong><br>혀가 윗잇몸에 붙음</span>
+            </button>
+            <button class="c-basic-btn" data-char="ㅁ">
+              <span class="char-symbol">ㅁ</span>
+              <span class="char-meta"><strong>순음(입술소리)</strong><br>입술의 모양을 본뜸</span>
+            </button>
+            <button class="c-basic-btn" data-char="ㅅ">
+              <span class="char-symbol">ㅅ</span>
+              <span class="char-meta"><strong>치음(잇소리)</strong><br>이빨의 뾰족한 모양</span>
+            </button>
+            <button class="c-basic-btn" data-char="ㅇ">
+              <span class="char-symbol">ㅇ</span>
+              <span class="char-meta"><strong>후음(목구멍소리)</strong><br>목구멍의 둥근 모양</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. 자음 작업대 -->
+        <div id="consonant-workbench" class="craft-board">
+          <div class="craft-board-header">
+            <span>🛠️ 자음 가공 작업대 (선택된 글자)</span>
+            <button id="btn-clear-c" class="small-clear-btn" title="작업대 비우기">🧹 비우기</button>
+          </div>
+
+          <div id="c-slots-container" class="workbench-slots">
+            <span class="empty-hint">위의 기본자(ㄱ, ㄴ, ㅁ, ㅅ, ㅇ)를 선택하세요</span>
+          </div>
+
+          <!-- 자음 원리 액션 버튼들 -->
+          <div class="action-button-group">
+            <button id="btn-gahoek" class="principle-btn btn-action-gahoek" disabled>
+              <span class="btn-icon">➕</span>
+              <span class="btn-label">가획 (加劃)</span>
+              <span class="btn-sub">소리가 거세어져 획을 더함</span>
+            </button>
+
+            <button id="btn-byeongseo" class="principle-btn btn-action-byeongseo" disabled>
+              <span class="btn-icon">👥</span>
+              <span class="btn-label">각자병서 (各自並書)</span>
+              <span class="btn-sub">같은 자음을 나란히 써서 된소리</span>
+            </button>
+
+            <button id="btn-iche" class="principle-btn btn-action-iche" disabled>
+              <span class="btn-icon">🔀</span>
+              <span class="btn-label">이체 (異體)</span>
+              <span class="btn-sub">발음 모양을 달리함 (ㄴ➔ㄹ 등)</span>
+            </button>
+
+            <button id="btn-hapyong" class="principle-btn btn-action-hapyong" disabled>
+              <span class="btn-icon">🤝</span>
+              <span class="btn-label">합용병서 (合用並書)</span>
+              <span class="btn-sub">두 자음을 결합하여 겹받침 생성</span>
+            </button>
+          </div>
+
+          <!-- 제작 완료 후 음절 슬롯으로 전송 -->
+          <div class="send-action-group">
+            <button id="btn-send-cho" class="send-slot-btn primary-send" disabled>
+              📥 초성(첫소리) 슬롯에 넣기
+            </button>
+            <button id="btn-send-jong" class="send-slot-btn secondary-send" disabled>
+              📥 종성(받침) 슬롯에 넣기
+            </button>
+          </div>
+
+          <!-- 실시간 창제 원리 알림 해설 -->
+          <div id="c-principle-info" class="principle-info-box">
+            자음 기본자(ㄱ, ㄴ, ㅁ, ㅅ, ㅇ)를 선택하여 창제를 시작하세요.
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== 모음 창제소 영역 ==================== -->
+      <div id="section-vowel" class="tab-content-panel hidden">
+        <div class="panel-guide-text">
+          우주 만물의 기본인 <strong>삼재(천·지·인)</strong>를 모아 <strong>[초출 합성]·[재출 합성]·[모음 합성]</strong>으로 세상의 온갖 소리를 만드세요.
+        </div>
+
+        <!-- 1. 기본자 선택 버튼들 (천지인) -->
+        <div class="basics-container">
+          <div class="group-title">모음 기본자 (삼재 天地人 상형):</div>
+          <div class="basics-grid vowel-grid">
+            <button class="v-basic-btn" data-char="ㆍ">
+              <span class="char-symbol">ㆍ</span>
+              <span class="char-meta"><strong>천 (天, 하늘)</strong><br>둥근 하늘 모양 (양의 기운)</span>
+            </button>
+            <button class="v-basic-btn" data-char="ㅡ">
+              <span class="char-symbol">ㅡ</span>
+              <span class="char-meta"><strong>지 (地, 땅)</strong><br>평평한 땅 모양 (음의 기운)</span>
+            </button>
+            <button class="v-basic-btn" data-char="ㅣ">
+              <span class="char-symbol">ㅣ</span>
+              <span class="char-meta"><strong>인 (人, 사람)</strong><br>서 있는 사람 모양 (중성)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. 모음 작업대 -->
+        <div id="vowel-workbench" class="craft-board">
+          <div class="craft-board-header">
+            <span>🛠️ 모음 합성 작업대 (배치된 모음들)</span>
+            <button id="btn-clear-v" class="small-clear-btn" title="작업대 비우기">🧹 비우기</button>
+          </div>
+
+          <div id="v-slots-container" class="workbench-slots">
+            <span class="empty-hint">위의 삼재 기본자(ㆍ, ㅡ, ㅣ)를 선택하세요</span>
+          </div>
+
+          <!-- 모음 원리 액션 버튼들 -->
+          <div class="action-button-group">
+            <button id="btn-chochul" class="principle-btn btn-action-chochul" disabled>
+              <span class="btn-icon">☀️</span>
+              <span class="btn-label">초출 합성 (初出)</span>
+              <span class="btn-sub">ㆍ와 ㅡ, ㅣ의 첫 결합 (ㅗ, ㅜ, ㅏ, ㅓ)</span>
+            </button>
+
+            <button id="btn-jaechul" class="principle-btn btn-action-jaechul" disabled>
+              <span class="btn-icon">🌟</span>
+              <span class="btn-label">재출 합성 (再出)</span>
+              <span class="btn-sub">하늘(ㆍ)을 한 번 더 더함 (ㅛ, ㅠ, ㅑ, ㅕ)</span>
+            </button>
+
+            <button id="btn-hapseong" class="principle-btn btn-action-hapseong" disabled>
+              <span class="btn-icon">🔗</span>
+              <span class="btn-label">모음 합성 (합용)</span>
+              <span class="btn-sub">두 모음을 결합하여 복합 모음 완성</span>
+            </button>
+          </div>
+
+          <!-- 제작 완료 후 중성 슬롯으로 전송 -->
+          <div class="send-action-group">
+            <button id="btn-send-jung" class="send-slot-btn primary-send" disabled>
+              📥 중성(가운뎃소리) 슬롯에 넣기
+            </button>
+          </div>
+
+          <!-- 실시간 모음 창제 원리 알림 해설 -->
+          <div id="v-principle-info" class="principle-info-box">
+            삼재 기본자(ㆍ, ㅡ, ㅣ)를 선택하여 모음 창제를 시작하세요.
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- 푸터 -->
+    <footer class="game-footer">
+      <p>훈민정음 해례본(訓民正音 解例本) 제자해(制字解) 원리에 기반한 교육용 게임</p>
+      <p class="copyright">“지혜로운 사람은 아침나절에 깨치고, 어리석은 사람도 열흘이면 배울 수 있다.” — 정인지 서문</p>
+    </footer>
+  </div>
+
+  <!-- 학생 참여 QR코드 모달 -->
+  <div id="modal-qrcode" class="modal-overlay hidden">
+    <div class="modal-card qrcode-card">
+      <div class="qrcode-modal-header">
+        <div class="qr-title-group">
+          <span class="qr-badge">교실 수업용</span>
+          <h2>📱 스마트폰 / 태블릿 참여 QR코드</h2>
+        </div>
+        <button id="btn-close-qr" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="qrcode-modal-body">
+        <p class="qr-guide-text">
+          학생들은 스마트폰이나 태블릿 기본 카메라를 켜고 아래 <strong>QR코드를 비추기만 하면</strong><br>
+          별도 로그인이나 앱 설치 없이 같은 방으로 즉시 입장합니다!
+        </p>
+
+        <div class="qr-display-box">
+          <div id="qrcode-canvas-container" class="qrcode-canvas-box"></div>
+          <div class="qr-room-info">
+            <span class="qr-room-label">현재 방 코드</span>
+            <div id="qr-modal-room-code" class="qr-room-number">------</div>
+          </div>
+        </div>
+
+        <div class="qr-url-copy-box">
+          <input type="text" id="qr-join-url-input" class="qr-url-input" readonly>
+          <button id="btn-copy-join-url" class="qr-copy-btn">📋 주소 복사</button>
+        </div>
+
+        <div class="qr-tip-alert">
+          💡 <strong>교실 팁:</strong> 빔프로젝터나 전자칠판에 이 창을 띄워두시면 학생들이 자리에서 편하게 스캔하여 입장할 수 있습니다.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 단어 완성 축하 모달 -->
+  <div id="modal-complete" class="modal-overlay hidden">
+    <div class="modal-card royal-decree">
+      <div class="decree-header">
+        <span class="seal-badge">御命</span>
+        <h2 id="modal-complete-title" class="decree-title">경축! 단어 창제 완성</h2>
+      </div>
+      <div class="decree-body">
+        <div id="modal-complete-word" class="royal-word">하늘</div>
+        <div class="decree-divider"></div>
+        <p id="modal-complete-story" class="royal-text"></p>
+        <!-- 학생 모둠 완료 알림 메시지 -->
+        <div id="modal-complete-team-info" class="modal-team-callout"></div>
+      </div>
+      <div class="decree-footer">
+        <button id="btn-view-explanation-from-complete" class="royal-btn secondary">📖 문제 해설 및 순위 보기</button>
+        <button id="btn-next-stage" class="royal-btn">다음 단어로 도전 ➔</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 모둠 전광판 대시보드 모달 -->
+  <div id="modal-team-dashboard" class="modal-overlay hidden">
+    <div class="modal-card team-dashboard-card">
+      <div class="dashboard-header">
+        <div class="dash-title-group">
+          <span class="dash-badge">실시간 순위</span>
+          <h2>🏆 집현전 모둠 대항전 현황판</h2>
+        </div>
+        <button id="btn-close-dashboard" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="dashboard-summary-bar">
+        <span id="dash-current-problem" class="dash-prob-text">현재 문제: 하늘</span>
+        <div class="dash-actions">
+          <button id="btn-reset-match" class="small-ctrl-btn">🔄 이번 문제 재시작</button>
+          <button id="btn-open-expl-from-dash" class="small-ctrl-btn highlight">📖 문제 해설 보기</button>
+        </div>
+      </div>
+      <!-- 모둠별 카드 리스트 -->
+      <div id="teams-live-container" class="teams-live-grid"></div>
+    </div>
+  </div>
+
+  <!-- 모둠 설정 모달 -->
+  <div id="modal-team-settings" class="modal-overlay hidden">
+    <div class="modal-card settings-card">
+      <div class="settings-header">
+        <h2>⚙️ 모둠 대항전 환경 설정</h2>
+        <button id="btn-close-settings" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="settings-body">
+        <div class="setting-item">
+          <label for="cfg-team-count">모둠 수:</label>
+          <select id="cfg-team-count" class="cfg-select">
+            <option value="2">2개 모둠</option>
+            <option value="3">3개 모둠</option>
+            <option value="4" selected>4개 모둠</option>
+            <option value="5">5개 모둠</option>
+            <option value="6">6개 모둠</option>
+          </select>
+        </div>
+        <div class="setting-item">
+          <label for="cfg-member-count">모둠당 학생 수:</label>
+          <select id="cfg-member-count" class="cfg-select">
+            <option value="1">1명 (개인전)</option>
+            <option value="2">2명</option>
+            <option value="3" selected>3명</option>
+            <option value="4">4명</option>
+            <option value="5">5명</option>
+          </select>
+        </div>
+        <p class="settings-tip">💡 설정 변경 시 모든 연결된 화면에 실시간으로 모둠 정보가 동기화됩니다.</p>
+      </div>
+      <div class="settings-footer">
+        <button id="btn-save-team-settings" class="royal-btn">설정 적용하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 문제 심층 해설 슬라이드 모달 (수업용) -->
+  <div id="modal-lesson-explanation" class="modal-overlay hidden">
+    <div class="modal-card lesson-explanation-card">
+      <div class="explanation-modal-header">
+        <div class="expl-title-block">
+          <span class="expl-badge">교과 심층 해설</span>
+          <h2 id="expl-modal-title">‘하늘’에 담긴 훈민정음 창제 원리</h2>
+        </div>
+        <button id="btn-close-explanation" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="explanation-scroll-area">
+        <!-- 1. 모둠 순위 결과 발표 배너 -->
+        <section class="rank-result-section">
+          <h3 class="section-mini-title">🏁 모둠별 완주 순위 및 점수</h3>
+          <div id="expl-rank-container" class="expl-rank-flex"></div>
+        </section>
+
+        <!-- 2. 단어 개요 -->
+        <div id="expl-summary-box" class="expl-summary-box"></div>
+
+        <!-- 3. 음절별 초성·중성·종성 창제 원리 카드들 -->
+        <section class="syllable-principle-section">
+          <h3 class="section-mini-title">🔍 음절별 제자 원리 완전 분석</h3>
+          <div id="expl-syllables-container" class="expl-syllables-grid"></div>
+        </section>
+
+        <!-- 4. 교과서 탐구 토의 질문 -->
+        <div id="expl-discussion-box" class="expl-discussion-box"></div>
+      </div>
+
+      <div class="explanation-modal-footer">
+        <button id="btn-expl-next-stage" class="royal-btn">다음 문제로 함께 진행 ➔</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 훈민정음 해례본 도감 모달 -->
+  <div id="modal-guide" class="modal-overlay hidden">
+    <div class="modal-card guide-card">
+      <div class="guide-modal-header">
+        <h2>📖 훈민정음 창제 원리 도감 (訓民正音 圖鑑)</h2>
+        <button id="btn-close-guide" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="guide-scroll-content">
+        <!-- 자음 원리 설명 -->
+        <article class="guide-article">
+          <h3>1. 초성(자음) 제자 원리</h3>
+          <p>초성은 사람의 <strong>발음기관을 상형</strong>하여 기본 5자를 만들고, 소리의 세기에 따라 <strong>가획(加劃)</strong>하며, 모양을 달리한 <strong>이체(異體)</strong>자와 나란히 쓰는 <strong>병서(並書)</strong>로 확장했습니다.</p>
+          <div class="table-responsive">
+            <table class="guide-table">
+              <thead>
+                <tr>
+                  <th>구분</th>
+                  <th>발음기관</th>
+                  <th>기본자 (상형)</th>
+                  <th>가획자 (획을 더함)</th>
+                  <th>이체자</th>
+                  <th>각자병서 (된소리)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>아음</strong> (어금닛소리)</td>
+                  <td>혀뿌리가 목구멍을 막는 모양</td>
+                  <td><span class="badge-char">ㄱ</span></td>
+                  <td><span class="badge-char">ㅋ</span></td>
+                  <td>ㆁ (옛이응)</td>
+                  <td><span class="badge-char">ㄲ</span></td>
+                </tr>
+                <tr>
+                  <td><strong>설음</strong> (혓소리)</td>
+                  <td>혀가 윗잇몸에 붙는 모양</td>
+                  <td><span class="badge-char">ㄴ</span></td>
+                  <td><span class="badge-char">ㄷ</span> ➔ <span class="badge-char">ㅌ</span></td>
+                  <td><span class="badge-char">ㄹ</span> (반설음)</td>
+                  <td><span class="badge-char">ㄸ</span></td>
+                </tr>
+                <tr>
+                  <td><strong>순음</strong> (입술소리)</td>
+                  <td>입술의 둥근 모양</td>
+                  <td><span class="badge-char">ㅁ</span></td>
+                  <td><span class="badge-char">ㅂ</span> ➔ <span class="badge-char">ㅍ</span></td>
+                  <td>-</td>
+                  <td><span class="badge-char">ㅃ</span></td>
+                </tr>
+                <tr>
+                  <td><strong>치음</strong> (잇소리)</td>
+                  <td>이빨의 날카로운 모양</td>
+                  <td><span class="badge-char">ㅅ</span></td>
+                  <td><span class="badge-char">ㅈ</span> ➔ <span class="badge-char">ㅊ</span></td>
+                  <td>ㅿ (반치음)</td>
+                  <td><span class="badge-char">ㅆ</span>, <span class="badge-char">ㅉ</span></td>
+                </tr>
+                <tr>
+                  <td><strong>후음</strong> (목구멍소리)</td>
+                  <td>목구멍의 둥근 모양</td>
+                  <td><span class="badge-char">ㅇ</span></td>
+                  <td>ㆆ(여린히읗) ➔ <span class="badge-char">ㅎ</span></td>
+                  <td>-</td>
+                  <td>-</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="guide-tip-box">
+            💡 <strong>합용병서 (合用並書)</strong>: 서로 다른 두세 개의 자음을 나란히 합쳐서 쓰는 원리로, 현대 국어에서는 주로 <code>ㄳ, ㄵ, ㄶ, ㄺ, ㄻ, ㄼ, ㄽ, ㄾ, ㄿ, ㅀ, ㅄ</code> 등 겹받침으로 활용됩니다.
+          </div>
+        </article>
+
+        <!-- 모음 원리 설명 -->
+        <article class="guide-article">
+          <h3>2. 중성(모음) 제자 원리</h3>
+          <p>모음은 우주의 근본인 <strong>삼재(三才: 천·지·인)</strong>를 상형하여 기본 3자를 만들고, 기본자를 결합하는 <strong>초출(初出)</strong>과 <strong>재출(再出)</strong>, 그리고 모음끼리 어우러지는 <strong>합용(합성)</strong>으로 모든 모음을 체계화했습니다.</p>
+          <div class="table-responsive">
+            <table class="guide-table">
+              <thead>
+                <tr>
+                  <th>단계</th>
+                  <th>결합 공식</th>
+                  <th>탄생 글자</th>
+                  <th>담긴 우주의 섭리</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>기본자</strong> (삼재 상형)</td>
+                  <td>천(ㆍ) · 지(ㅡ) · 인(ㅣ)</td>
+                  <td><span class="badge-char">ㆍ</span>, <span class="badge-char">ㅡ</span>, <span class="badge-char">ㅣ</span></td>
+                  <td>둥근 하늘, 평평한 땅, 서 있는 사람을 본뜸</td>
+                </tr>
+                <tr>
+                  <td><strong>초출자</strong> (1차 결합)</td>
+                  <td>ㆍ+ㅡ, ㅡ+ㆍ<br>ㆍ+ㅣ, ㅣ+ㆍ</td>
+                  <td><span class="badge-char">ㅗ</span>, <span class="badge-char">ㅜ</span><br><span class="badge-char">ㅏ</span>, <span class="badge-char">ㅓ</span></td>
+                  <td>하늘과 땅, 하늘과 사람이 처음으로 만나 음양을 이룸</td>
+                </tr>
+                <tr>
+                  <td><strong>재출자</strong> (2차 결합)</td>
+                  <td>초출자 + ㆍ</td>
+                  <td><span class="badge-char">ㅛ</span>, <span class="badge-char">ㅠ</span><br><span class="badge-char">ㅑ</span>, <span class="badge-char">ㅕ</span></td>
+                  <td>하늘(ㆍ)의 기운이 한 번 더 거듭나 소리가 겹침</td>
+                </tr>
+                <tr>
+                  <td><strong>합용 (모음 합성)</strong></td>
+                  <td>모음끼리의 조화</td>
+                  <td><span class="badge-char">ㅐ, ㅔ, ㅘ, ㅙ, ㅚ, ㅝ, ㅞ, ㅟ, ㅢ</span> 등</td>
+                  <td>초출자·재출자에 ㅣ나 다른 모음을 결합하여 풍부한 소리를 냄</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <!-- 스크립트 연결 -->
+  <script src="qrcode.min.js"></script>
+  <script src="cloud-sync.js"></script>
+  <script src="hangul-engine.js"></script>
+  <script src="sound-engine.js"></script>
+  <script src="team-manager.js"></script>
+  <script src="lesson-explanation.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
