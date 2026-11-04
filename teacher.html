@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>훈민정음 공방 - 교사용 관리 대시보드</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="teacher.css">
+</head>
+<body class="teacher-dashboard-body">
+  <div class="teacher-container">
+    <!-- 교사 대시보드 상단 헤더 -->
+    <header class="teacher-header">
+      <div class="t-header-left">
+        <div class="seal-mark small">訓民<br>正音</div>
+        <div class="t-titles">
+          <h1>집현전 한글 공방 <span class="teacher-tag">👨‍🏫 교사용 대시보드</span></h1>
+          <p>모둠별 실시간 완주 현황 관제 및 교과 심층 해설</p>
+        </div>
+      </div>
+
+      <div class="t-header-right">
+        <div class="room-pill">
+          <span class="room-lbl">방 코드:</span>
+          <strong id="t-room-code" class="room-val">------</strong>
+          <span id="t-cloud-status" class="cloud-status-dot">연결중...</span>
+        </div>
+        <button id="btn-t-qr-toggle" class="ctrl-btn qr-btn">📱 학생 QR 크게보기</button>
+        <button id="btn-t-settings" class="ctrl-btn">⚙️ 모둠/인원 설정</button>
+        <button id="btn-sound-toggle" class="ctrl-btn">🔊 소리 켜짐</button>
+      </div>
+    </header>
+
+    <!-- 대형 스크린 메인 그리드 -->
+    <main class="teacher-main-layout">
+      <!-- 좌측: 학생 입장 QR코드 안내 패널 -->
+      <aside class="t-qr-sidebar">
+        <div class="t-qr-card">
+          <div class="t-qr-badge">학생 스마트폰 / 태블릿 입장</div>
+          <p class="t-qr-desc">스마트폰 기본 카메라로 비추면 바로 게임에 입장합니다!</p>
+          
+          <div class="qr-canvas-wrapper">
+            <div id="t-qrcode-container" class="t-qrcode-box"></div>
+          </div>
+
+          <div class="t-room-highlight">
+            <span class="lbl">입장 방 코드</span>
+            <span id="t-qr-room-text" class="code">------</span>
+          </div>
+
+          <div class="t-url-box">
+            <input type="text" id="t-join-url-input" readonly>
+            <button id="btn-t-copy-url">주소 복사</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 우측: 모둠별 실시간 대항전 전광판 -->
+      <section class="t-battle-section">
+        <!-- 현재 문제 상태 및 컨트롤 바 -->
+        <div class="t-control-bar">
+          <div class="prob-select-group">
+            <label for="t-stage-select">진행 문제:</label>
+            <select id="t-stage-select" class="t-select"></select>
+          </div>
+          
+          <div class="t-btn-group">
+            <button id="btn-t-start-problem" class="t-action-btn primary">🚀 이번 문제 일괄 시작 (타이머 리셋)</button>
+            <button id="btn-t-open-explanation" class="t-action-btn highlight">💡 문제 심층 해설 슬라이드 열기</button>
+          </div>
+        </div>
+
+        <!-- 모둠 실시간 상태 카드 그리드 -->
+        <div class="t-teams-grid-container">
+          <div class="t-teams-header">
+            <h2>🏆 모둠별 실시간 완주 현황 및 순위</h2>
+            <span class="t-tip">※ 모둠원 전원이 모두 단어를 완성하면 순위가 확정됩니다.</span>
+          </div>
+          <div id="t-teams-live-grid" class="t-teams-cards"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 모둠별 개별 인원수 설정 모달 -->
+  <div id="modal-teacher-settings" class="modal-overlay hidden">
+    <div class="modal-card t-settings-modal-card">
+      <div class="settings-header">
+        <h2>⚙️ 모둠 구성 및 모둠원 수 개별 설정</h2>
+        <button id="btn-t-close-settings" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="settings-body">
+        <p class="settings-guide">
+          각 모둠별로 학생 수가 달라도 괜찮습니다! 모둠마다 학생 수를 자유롭게 설정하세요.<br>
+          (해당 모둠의 학생 전원이 완성해야 최종 완주로 인정됩니다.)
+        </p>
+
+        <!-- 모둠별 개별 인원수 리스트 -->
+        <div id="t-teams-config-list" class="t-teams-config-list"></div>
+
+        <div class="t-add-team-row">
+          <button id="btn-t-add-team" class="action-small-btn">+ 새 모둠 추가</button>
+        </div>
+      </div>
+
+      <div class="settings-footer">
+        <button id="btn-t-save-config" class="royal-btn">설정 저장 및 전체 기기 동기화</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR코드 전체화면 모달 (칠판 투사용) -->
+  <div id="modal-teacher-big-qr" class="modal-overlay hidden">
+    <div class="modal-card big-qr-card">
+      <div class="big-qr-header">
+        <h2>📱 학생 입장 QR코드 (칠판 전체화면)</h2>
+        <button id="btn-t-close-big-qr" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="big-qr-body">
+        <p class="big-qr-desc">스마트폰 기본 카메라로 아래 QR코드를 비추어 입장하세요!</p>
+        <div id="t-big-qr-container" class="big-qr-box"></div>
+        <div class="big-qr-code-row">
+          방 코드: <strong id="t-big-room-code">------</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 문제 심층 해설 슬라이드 모달 (수업용) -->
+  <div id="modal-lesson-explanation" class="modal-overlay hidden">
+    <div class="modal-card lesson-explanation-card">
+      <div class="explanation-modal-header">
+        <div class="expl-title-block">
+          <span class="expl-badge">교과 심층 해설</span>
+          <h2 id="expl-modal-title">‘하늘’에 담긴 훈민정음 창제 원리</h2>
+        </div>
+        <button id="btn-close-explanation" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="explanation-scroll-area">
+        <!-- 1. 모둠 순위 결과 발표 -->
+        <section class="rank-result-section">
+          <h3 class="section-mini-title">🏁 모둠별 완주 순위 및 점수</h3>
+          <div id="expl-rank-container" class="expl-rank-flex"></div>
+        </section>
+
+        <!-- 2. 단어 개요 -->
+        <div id="expl-summary-box" class="expl-summary-box"></div>
+
+        <!-- 3. 음절별 제자 원리 카드들 -->
+        <section class="syllable-principle-section">
+          <h3 class="section-mini-title">🔍 음절별 제자 원리 완전 분석</h3>
+          <div id="expl-syllables-container" class="expl-syllables-grid"></div>
+        </section>
+
+        <!-- 4. 교과서 탐구 토의 질문 -->
+        <div id="expl-discussion-box" class="expl-discussion-box"></div>
+      </div>
+
+      <div class="explanation-modal-footer">
+        <button id="btn-expl-next-stage" class="royal-btn">다음 문제로 함께 진행 ➔</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 스크립트 연결 -->
+  <script src="qrcode.min.js"></script>
+  <script src="qr-helper.js"></script>
+  <script src="cloud-sync.js"></script>
+  <script src="hangul-engine.js"></script>
+  <script src="sound-engine.js"></script>
+  <script src="team-manager.js"></script>
+  <script src="lesson-explanation.js"></script>
+  <script src="teacher.js"></script>
+</body>
+</html>

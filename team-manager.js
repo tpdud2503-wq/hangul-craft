@@ -1,23 +1,18 @@
 /**
- * 모둠 대항전 관리 및 실시간 동기화 엔진
- * - 교실 수업에서 2~6개 모둠, 모둠당 1~5명 학생 지원
- * - BroadcastChannel 및 localStorage를 활용한 다중 탭/창 실시간 연동
- * - 모둠원 전원 완성 시 실시간 순위(1등, 2등, 3등...) 판정 및 점수 계산
+ * 모둠 대항전 관리 및 실시간 동기화 엔진 (모둠별 개별 인원수 설정 완벽 지원)
  */
 
 class TeamManager {
   constructor() {
     this.channel = null;
-    this.teamCount = 4;
-    this.memberCount = 3;
     this.teams = [];
     this.currentStudent = { teamId: 1, memberId: 1, name: '학생 1' };
     this.isMatchActive = false;
     this.matchStartTime = null;
-    this.rankings = []; // 순위대로 기록된 모둠 목록
+    this.rankings = [];
     this.onUpdateCallbacks = [];
 
-    this.defaultTeamNames = ['1모둠 (가온)', '2모둠 (누리)', '3모둠 (라온)', '4모둠 (다솜)', '5모둠 (마루)', '6모둠 (바론)'];
+    this.defaultTeamNames = ['1모둠 (가온)', '2모둠 (누리)', '3모둠 (라온)', '4모둠 (다솜)', '5모둠 (마루)', '6모둠 (바론)', '7모둠 (새론)', '8모둠 (예그리나)'];
 
     this.initBroadcastChannel();
     this.loadSettings();
@@ -30,10 +25,9 @@ class TeamManager {
         this.handleBroadcastMessage(event.data);
       };
     } catch (e) {
-      console.warn('BroadcastChannel not supported, fallback to localStorage only.', e);
+      console.warn('BroadcastChannel not supported', e);
     }
 
-    // fallback: storage 이벤트 감지
     window.addEventListener('storage', (e) => {
       if (e.key === 'hangul_match_sync_event' && e.newValue) {
         try {
@@ -51,10 +45,8 @@ class TeamManager {
     if (this.channel) {
       this.channel.postMessage(data);
     }
-    // localStorage를 통한 브로드캐스트 (타 창 감지용)
     localStorage.setItem('hangul_match_sync_event', JSON.stringify(data));
 
-    // 클라우드 브로커로 실시간 발행 (스마트폰/태블릿 등 외부 기기 연동)
     if (window.cloudSync) {
       window.cloudSync.publish(data);
     }
@@ -63,7 +55,7 @@ class TeamManager {
   handleBroadcastMessage(data) {
     if (!data || !data.type) return;
 
-    // 내가 보낸 메시지 중복 처리 방지
+    // 내가 보낸 완료 메시지 중복 처리 방지
     if (data.sender && 
         data.sender.teamId === this.currentStudent.teamId && 
         data.sender.memberId === this.currentStudent.memberId && 
@@ -78,8 +70,8 @@ class TeamManager {
       case 'RESET_MATCH':
         this.resetMatchState(false);
         break;
-      case 'SETUP_TEAMS':
-        this.applyTeamConfig(data.payload.teamCount, data.payload.memberCount, data.payload.teamNames, false);
+      case 'UPDATE_TEAMS_CONFIG':
+        this.applyTeamsConfig(data.payload.teams, false);
         break;
       case 'STAGE_CHANGE':
         if (window.game && window.game.currentStageIdx !== data.payload.stageIdx) {
@@ -90,37 +82,37 @@ class TeamManager {
   }
 
   loadSettings() {
-    const saved = localStorage.getItem('hangul_team_settings');
+    const saved = localStorage.getItem('hangul_team_settings_v2');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        this.teamCount = parsed.teamCount || 4;
-        this.memberCount = parsed.memberCount || 3;
-        this.initTeams(parsed.teamNames);
-        return;
+        if (Array.isArray(parsed.teams) && parsed.teams.length > 0) {
+          this.teams = parsed.teams;
+          this.triggerUpdate();
+          return;
+        }
       } catch (e) {
         console.error(e);
       }
     }
-    this.initTeams();
+    // 기본 모둠 4개, 각각 3명씩 초기화
+    this.initDefaultTeams(4, 3);
   }
 
   saveSettings() {
     const data = {
-      teamCount: this.teamCount,
-      memberCount: this.memberCount,
-      teamNames: this.teams.map(t => t.name)
+      teams: this.teams
     };
-    localStorage.setItem('hangul_team_settings', JSON.stringify(data));
+    localStorage.setItem('hangul_team_settings_v2', JSON.stringify(data));
   }
 
-  initTeams(customNames = null) {
+  initDefaultTeams(teamCount = 4, defaultMemberCount = 3) {
     this.teams = [];
     this.rankings = [];
-    for (let i = 1; i <= this.teamCount; i++) {
-      const name = (customNames && customNames[i - 1]) ? customNames[i - 1] : this.defaultTeamNames[i - 1] || `${i}모둠`;
+    for (let i = 1; i <= teamCount; i++) {
+      const name = this.defaultTeamNames[i - 1] || `${i}모둠`;
       const members = [];
-      for (let m = 1; m <= this.memberCount; m++) {
+      for (let m = 1; m <= defaultMemberCount; m++) {
         members.push({
           id: m,
           name: `학생 ${m}`,
@@ -131,6 +123,7 @@ class TeamManager {
       this.teams.push({
         id: i,
         name: name,
+        memberCount: defaultMemberCount,
         members: members,
         isAllCompleted: false,
         completedTime: null,
@@ -138,23 +131,107 @@ class TeamManager {
         score: 0
       });
     }
+    this.saveSettings();
     this.triggerUpdate();
   }
 
-  applyTeamConfig(teamCount, memberCount, teamNames = null, broadcast = true) {
-    this.teamCount = teamCount;
-    this.memberCount = memberCount;
-    this.initTeams(teamNames);
+  /**
+   * 모둠 설정 일괄 적용 (모둠별 개별 인원수 및 이름 지원)
+   */
+  applyTeamsConfig(newTeams, broadcast = true) {
+    this.teams = newTeams;
     this.saveSettings();
 
-    // 현재 학생 설정도 유효 범위 내로 보정
-    if (this.currentStudent.teamId > this.teamCount) this.currentStudent.teamId = 1;
-    if (this.currentStudent.memberId > this.memberCount) this.currentStudent.memberId = 1;
+    // 현재 학생 설정 보정
+    const team = this.teams.find(t => t.id === this.currentStudent.teamId) || this.teams[0];
+    if (team) {
+      this.currentStudent.teamId = team.id;
+      if (this.currentStudent.memberId > team.members.length) {
+        this.currentStudent.memberId = 1;
+      }
+      const member = team.members.find(m => m.id === this.currentStudent.memberId);
+      if (member) {
+        this.currentStudent.name = member.name;
+      }
+    }
 
     if (broadcast) {
-      this.broadcast('SETUP_TEAMS', { teamCount, memberCount, teamNames: this.teams.map(t => t.name) });
+      this.broadcast('UPDATE_TEAMS_CONFIG', { teams: this.teams });
     }
     this.triggerUpdate();
+  }
+
+  /**
+   * 특정 모둠의 인원수 개별 변경 (예: 1모둠 4명, 2모둠 3명)
+   */
+  setTeamMemberCount(teamId, count) {
+    const team = this.teams.find(t => t.id === teamId);
+    if (!team) return;
+
+    count = Math.max(1, Math.min(8, parseInt(count, 10)));
+    team.memberCount = count;
+
+    // 인원수가 늘어나면 학생 추가
+    while (team.members.length < count) {
+      const nextId = team.members.length + 1;
+      team.members.push({
+        id: nextId,
+        name: `학생 ${nextId}`,
+        completed: false,
+        completedTime: null
+      });
+    }
+
+    // 인원수가 줄어들면 뒤에서부터 제거
+    if (team.members.length > count) {
+      team.members = team.members.slice(0, count);
+    }
+
+    this.applyTeamsConfig(this.teams, true);
+  }
+
+  /**
+   * 모둠 추가
+   */
+  addTeam(name = null, memberCount = 3) {
+    if (this.teams.length >= 8) return;
+    const nextId = this.teams.length + 1;
+    const teamName = name || this.defaultTeamNames[nextId - 1] || `${nextId}모둠`;
+    const members = [];
+    for (let m = 1; m <= memberCount; m++) {
+      members.push({
+        id: m,
+        name: `학생 ${m}`,
+        completed: false,
+        completedTime: null
+      });
+    }
+
+    this.teams.push({
+      id: nextId,
+      name: teamName,
+      memberCount: memberCount,
+      members: members,
+      isAllCompleted: false,
+      completedTime: null,
+      rank: null,
+      score: 0
+    });
+
+    this.applyTeamsConfig(this.teams, true);
+  }
+
+  /**
+   * 모둠 삭제
+   */
+  removeTeam(teamId) {
+    if (this.teams.length <= 2) return; // 최소 2모둠 유지
+    this.teams = this.teams.filter(t => t.id !== teamId);
+    // id 재정렬
+    this.teams.forEach((t, idx) => {
+      t.id = idx + 1;
+    });
+    this.applyTeamsConfig(this.teams, true);
   }
 
   setCurrentStudent(teamId, memberId) {
@@ -167,25 +244,6 @@ class TeamManager {
         this.currentStudent.name = member.name;
       }
     }
-    this.triggerUpdate();
-  }
-
-  startMatch() {
-    this.isMatchActive = true;
-    this.matchStartTime = Date.now();
-    this.rankings = [];
-
-    this.teams.forEach(t => {
-      t.isAllCompleted = false;
-      t.completedTime = null;
-      t.rank = null;
-      t.members.forEach(m => {
-        m.completed = false;
-        m.completedTime = null;
-      });
-    });
-
-    this.broadcast('RESET_MATCH', { startTime: this.matchStartTime });
     this.triggerUpdate();
   }
 
@@ -220,7 +278,7 @@ class TeamManager {
     const member = team.members.find(m => m.id === memberId);
     if (!member) return;
 
-    if (member.completed) return; // 이미 완료됨
+    if (member.completed) return;
 
     const elapsed = time || (this.matchStartTime ? Math.round((Date.now() - this.matchStartTime) / 1000) : 0);
     member.completed = true;
@@ -230,7 +288,7 @@ class TeamManager {
       this.broadcast('STUDENT_COMPLETED', { teamId, memberId, time: elapsed });
     }
 
-    // 해당 모둠의 모든 학생이 완료되었는지 확인
+    // 해당 모둠의 등록된 인원 전원이 완료되었는지 확인
     const allDone = team.members.every(m => m.completed);
     if (allDone && !team.isAllCompleted) {
       team.isAllCompleted = true;
@@ -238,12 +296,10 @@ class TeamManager {
       this.rankings.push(team);
       team.rank = this.rankings.length;
 
-      // 점수 계산 (1등 100점, 2등 80점, 3등 60점, 4등 40점...)
       const scoreTable = [100, 80, 60, 40, 20, 10];
       const earnedScore = scoreTable[team.rank - 1] || 10;
       team.score += earnedScore;
 
-      // 모둠 완주 알림 효과음
       if (window.soundEngine) {
         if (team.rank === 1) {
           window.soundEngine.playWordComplete();
@@ -254,13 +310,6 @@ class TeamManager {
     }
 
     this.triggerUpdate();
-  }
-
-  /**
-   * 모든 모둠이 완료되었는지 확인
-   */
-  isAllTeamsFinished() {
-    return this.teams.every(t => t.isAllCompleted);
   }
 
   onUpdate(callback) {

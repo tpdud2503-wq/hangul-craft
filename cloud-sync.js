@@ -42,7 +42,13 @@ class CloudSync {
   }
 
   getJoinUrl() {
-    return window.location.origin + window.location.pathname + '?room=' + this.roomId;
+    let basePath = window.location.pathname;
+    if (basePath.endsWith('teacher.html') || basePath.endsWith('index.html')) {
+      basePath = basePath.replace(/teacher\.html|index\.html$/, 'student.html');
+    } else if (!basePath.endsWith('student.html')) {
+      basePath = basePath.replace(/\/?$/, '/student.html');
+    }
+    return window.location.origin + basePath + '?room=' + this.roomId;
   }
 
   initMqtt() {
