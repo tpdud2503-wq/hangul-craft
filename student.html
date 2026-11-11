@@ -72,6 +72,9 @@
       </div>
     </section>
 
+    <!-- 우리 모둠 실시간 등수 알림 배너 (완주시 표시) -->
+    <div id="team-rank-banner" class="team-rank-banner hidden"></div>
+
     <!-- 스테이지 및 힌트 바 -->
     <section class="stage-bar">
       <div class="stage-info-group">
@@ -126,6 +129,21 @@
         <div class="assembly-slot-item preview-item">
           <div class="slot-header">합자 결과</div>
           <div id="active-char-preview" class="assembled-preview">?</div>
+        </div>
+      </div>
+
+      <!-- 학생 과제 제출 및 준비 완료 영역 -->
+      <div class="submit-action-area">
+        <button id="btn-student-submit" class="btn-student-submit" disabled>
+          <span class="btn-submit-icon">⏳</span>
+          <span class="btn-submit-text">모든 글자를 완성한 후 제출할 수 있습니다</span>
+        </button>
+        <div id="submit-status-message" class="submit-status-message hidden">
+          <span class="status-check-icon">✅</span>
+          <div class="status-check-text">
+            <strong>제출 완료! 다음 스텝 준비 완료 ✓</strong>
+            <span id="submit-team-status-text">우리 모둠원들의 제출을 기다리는 중...</span>
+          </div>
         </div>
       </div>
     </section>

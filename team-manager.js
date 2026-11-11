@@ -78,6 +78,29 @@ class TeamManager {
           window.game.loadStage(data.payload.stageIdx, false);
         }
         break;
+      case 'REQUEST_ROOM_STATE':
+        // 교사 대시보드가 이 방의 호스트로서 현재 최신 모둠 구성 및 진행 스테이지를 즉시 회신
+        if (window.teacherDashboard) {
+          this.broadcast('ROOM_STATE_SYNC', {
+            teams: this.teams,
+            stageIdx: window.teacherDashboard.currentStageIdx,
+            matchStartTime: this.matchStartTime,
+            isMatchActive: this.isMatchActive
+          });
+        }
+        break;
+      case 'ROOM_STATE_SYNC':
+        // 학생 화면에서 교사의 최신 모둠 설정 및 문제 상태를 완벽 동기화
+        if (data.payload.teams && Array.isArray(data.payload.teams)) {
+          this.applyTeamsConfig(data.payload.teams, false);
+        }
+        if (data.payload.matchStartTime) {
+          this.matchStartTime = data.payload.matchStartTime;
+        }
+        if (window.game && typeof data.payload.stageIdx === 'number' && window.game.currentStageIdx !== data.payload.stageIdx) {
+          window.game.loadStage(data.payload.stageIdx, false);
+        }
+        break;
     }
   }
 

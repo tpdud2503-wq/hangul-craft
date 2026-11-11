@@ -80,6 +80,13 @@ class StudentGame {
     this.hintPanel = document.getElementById('hint-panel');
     this.hintContent = document.getElementById('hint-content');
     this.modalComplete = document.getElementById('modal-complete');
+
+    // 학생 제출 및 준비 완료 요소
+    this.btnStudentSubmit = document.getElementById('btn-student-submit');
+    this.submitStatusMsg = document.getElementById('submit-status-message');
+    this.submitTeamStatusText = document.getElementById('submit-team-status-text');
+    this.teamRankBanner = document.getElementById('team-rank-banner');
+    this.isSubmitted = false;
   }
 
   bindEvents() {
@@ -93,6 +100,11 @@ class StudentGame {
 
     document.getElementById('btn-next-stage').addEventListener('click', () => {
       this.modalComplete.classList.add('hidden');
+    });
+
+    // 제출 및 준비 완료 버튼 클릭
+    this.btnStudentSubmit.addEventListener('click', () => {
+      this.handleStudentSubmit();
     });
 
     // 팀 선택 변경
@@ -156,8 +168,9 @@ class StudentGame {
       }
     });
 
-    // 팀 매니저 업데이트 콜백
+    // 팀 매니저 업데이트 콜백: 모둠 설정(인원수)이나 학생 완료 상태 변경 시 드롭다운과 상태 즉시 갱신!
     window.teamManager.onUpdate(() => {
+      this.updateTeamSelect();
       this.updateTeamStatus();
     });
   }
@@ -165,11 +178,19 @@ class StudentGame {
   initCloud() {
     if (window.cloudSync) {
       this.roomDisplay.textContent = window.cloudSync.roomId;
+      window.cloudSync.onStatusChange((connected) => {
+        if (connected) {
+          window.teamManager.broadcast('REQUEST_ROOM_STATE', {});
+        }
+      });
     }
+    // 최초 접속 시 교사에게 현재 방 상태 요청
+    window.teamManager.broadcast('REQUEST_ROOM_STATE', {});
     this.updateTeamSelect();
   }
 
   updateTeamSelect() {
+    const prevTeamId = parseInt(this.selectMyTeam.value, 10) || window.teamManager.currentStudent.teamId;
     this.selectMyTeam.innerHTML = '';
     window.teamManager.teams.forEach(t => {
       const opt = document.createElement('option');
@@ -177,20 +198,34 @@ class StudentGame {
       opt.textContent = `${t.name} (${t.members.length}명)`;
       this.selectMyTeam.appendChild(opt);
     });
+
+    // 기존에 선택했던 모둠 유지
+    if (window.teamManager.teams.some(t => t.id === prevTeamId)) {
+      this.selectMyTeam.value = prevTeamId;
+    } else if (window.teamManager.teams.length > 0) {
+      this.selectMyTeam.value = window.teamManager.teams[0].id;
+    }
+
     this.updateMemberSelect();
   }
 
   updateMemberSelect() {
     const teamId = parseInt(this.selectMyTeam.value, 10);
     const team = window.teamManager.teams.find(t => t.id === teamId);
+    const prevMemberId = parseInt(this.selectMyMember.value, 10) || window.teamManager.currentStudent.memberId;
     this.selectMyMember.innerHTML = '';
     if (team) {
       team.members.forEach(m => {
         const opt = document.createElement('option');
         opt.value = m.id;
-        opt.textContent = m.name;
+        opt.textContent = `${m.name} ${m.completed ? '✓' : ''}`;
         this.selectMyMember.appendChild(opt);
       });
+      if (team.members.some(m => m.id === prevMemberId)) {
+        this.selectMyMember.value = prevMemberId;
+      } else if (team.members.length > 0) {
+        this.selectMyMember.value = team.members[0].id;
+      }
     }
   }
 
@@ -204,11 +239,25 @@ class StudentGame {
 
     const myMember = team.members.find(m => m.id === memberId);
     if (myMember && myMember.completed) {
-      this.studentStatusBadge.textContent = '완성 완료 ✓';
+      this.studentStatusBadge.textContent = '준비 완료 ✓';
       this.studentStatusBadge.className = 'student-status-chip completed';
+      this.isSubmitted = true;
+      this.btnStudentSubmit.disabled = true;
+      this.btnStudentSubmit.classList.add('submitted');
+      this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = '✅';
+      this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = '제출 완료! (다음 스텝 준비 완료)';
+      this.submitStatusMsg.classList.remove('hidden');
     } else {
       this.studentStatusBadge.textContent = '풀이 중 ✍️';
       this.studentStatusBadge.className = 'student-status-chip solving';
+      if (!this.checkAllCompleted()) {
+        this.isSubmitted = false;
+        this.btnStudentSubmit.disabled = true;
+        this.btnStudentSubmit.classList.remove('ready-to-submit', 'submitted');
+        this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = '⏳';
+        this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = '모든 글자를 완성한 후 제출할 수 있습니다';
+        this.submitStatusMsg.classList.add('hidden');
+      }
     }
 
     const doneCount = team.members.filter(m => m.completed).length;
@@ -217,9 +266,53 @@ class StudentGame {
 
     this.teamProgressBar.style.width = `${percent}%`;
     this.teamProgressText.textContent = `${doneCount} / ${totalCount}명`;
+    this.submitTeamStatusText.textContent = `우리 모둠원 제출 현황: ${doneCount} / ${totalCount}명 완료`;
 
+    // 우리 모둠이 완주했을 때 등수 배너 및 모달 즉시 표시
     if (team.isAllCompleted) {
       this.teamProgressText.innerHTML = `<strong>전원 완성! (${team.rank}등 🏆)</strong>`;
+      this.teamRankBanner.classList.remove('hidden');
+      const medalIcons = ['🥇', '🥈', '🥉'];
+      const icon = medalIcons[team.rank - 1] || '🎖️';
+      this.teamRankBanner.innerHTML = `
+        <div class="team-rank-banner-inner">
+          <span class="rank-banner-medal">${icon}</span>
+          <div class="rank-banner-text">
+            <strong>우리 모둠 완주 성공! [${team.rank}등] 달성!</strong>
+            <span>완주 소요 시간: ${team.completedTime}초 | 획득 점수: +${[100, 80, 60, 40, 20, 10][team.rank - 1] || 10}점</span>
+          </div>
+        </div>
+      `;
+    } else {
+      this.teamRankBanner.classList.add('hidden');
+    }
+  }
+
+  handleStudentSubmit() {
+    if (!this.checkAllCompleted() || this.isSubmitted) return;
+
+    this.isSubmitted = true;
+    const cur = window.teamManager.currentStudent;
+    window.teamManager.recordMemberCompletion(cur.teamId, cur.memberId);
+
+    window.soundEngine.playPyeongyeong(880);
+
+    this.btnStudentSubmit.disabled = true;
+    this.btnStudentSubmit.classList.remove('ready-to-submit');
+    this.btnStudentSubmit.classList.add('submitted');
+    this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = '✅';
+    this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = '제출 완료! (다음 스텝 준비 완료)';
+    this.submitStatusMsg.classList.remove('hidden');
+
+    this.studentStatusBadge.textContent = '준비 완료 ✓';
+    this.studentStatusBadge.className = 'student-status-chip completed';
+
+    this.showToast('과제가 제출되었습니다! 다음 스텝 준비 완료로 체크되었습니다. 👍');
+
+    // 모둠원 전원 완성인지 확인
+    const team = window.teamManager.teams.find(t => t.id === cur.teamId);
+    if (team && team.isAllCompleted) {
+      setTimeout(() => this.celebrateWordComplete(), 400);
     }
   }
 
@@ -227,6 +320,20 @@ class StudentGame {
     this.currentStageIdx = idx;
     this.currentStageData = STAGES[idx];
     this.currentWord = this.currentStageData.word;
+
+    this.isSubmitted = false;
+    if (this.btnStudentSubmit) {
+      this.btnStudentSubmit.disabled = true;
+      this.btnStudentSubmit.classList.remove('ready-to-submit', 'submitted');
+      this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = '⏳';
+      this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = '모든 글자를 완성한 후 제출할 수 있습니다';
+    }
+    if (this.submitStatusMsg) {
+      this.submitStatusMsg.classList.add('hidden');
+    }
+    if (this.teamRankBanner) {
+      this.teamRankBanner.classList.add('hidden');
+    }
 
     this.stageDisplayTitle.textContent = `${idx + 1}. ${this.currentWord}`;
     this.stageTitleEl.textContent = this.currentStageData.title;
@@ -321,7 +428,14 @@ class StudentGame {
           this.renderWordCards();
 
           if (this.checkAllCompleted()) {
-            setTimeout(() => this.celebrateWordComplete(), 500);
+            if (!this.isSubmitted && this.btnStudentSubmit) {
+              this.btnStudentSubmit.disabled = false;
+              this.btnStudentSubmit.classList.add('ready-to-submit');
+              this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = '🚀';
+              this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = '과제 완성! [제출 및 다음 스텝 준비 완료] 체크하기';
+              this.showToast('단어를 완성했습니다! 아래 [제출 및 다음 스텝 준비 완료] 버튼을 눌러 제출하세요. 🎉');
+              window.soundEngine.playWordComplete();
+            }
           } else {
             setTimeout(() => {
               const nextIdx = this.syllables.findIndex(s => !s.isDone);
@@ -354,8 +468,6 @@ class StudentGame {
     window.soundEngine.playWordComplete();
 
     const cur = window.teamManager.currentStudent;
-    window.teamManager.recordMemberCompletion(cur.teamId, cur.memberId);
-
     const team = window.teamManager.teams.find(t => t.id === cur.teamId);
     const modalTitle = document.getElementById('modal-complete-title');
     const modalWord = document.getElementById('modal-complete-word');
@@ -374,14 +486,14 @@ class StudentGame {
         modalTeamInfo.innerHTML = `
           <div class="team-all-done-banner">
             🎉 <strong>${team.name}</strong> 전원 완성! <br>
-            <strong>모둠 등수: <span class="rank-highlight">${team.rank}등 🏆</span></strong> (소요 시간: ${team.completedTime}초)
+            <strong>우리 모둠 등수: <span class="rank-highlight">${team.rank}등 🏆</span></strong> (소요 시간: ${team.completedTime}초)
           </div>
         `;
       } else {
         modalTeamInfo.innerHTML = `
           <div class="team-waiting-banner">
-            🏃‍♂️ 나의 글자 완성 완료! <br>
-            우리 모둠원들의 완성을 기다리는 중입니다... (<strong>${doneCount} / ${totalCount}명</strong>)
+            🏃‍♂️ 나의 과제 제출 완료! <br>
+            우리 모둠원들의 제출을 기다리는 중입니다... (<strong>${doneCount} / ${totalCount}명 완료</strong>)
           </div>
         `;
       }

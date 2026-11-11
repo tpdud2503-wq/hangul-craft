@@ -134,6 +134,15 @@ class TeacherDashboard {
     window.cloudSync.onStatusChange((connected, text) => {
       this.tCloudStatusEl.textContent = text;
       this.tCloudStatusEl.className = `cloud-status-dot ${connected ? 'online' : 'offline'}`;
+      if (connected) {
+        // 교사 대시보드 연결 즉시 방 전체에 현재 모둠 설정과 문제 상태 브로드캐스트
+        window.teamManager.broadcast('ROOM_STATE_SYNC', {
+          teams: window.teamManager.teams,
+          stageIdx: this.currentStageIdx,
+          matchStartTime: window.teamManager.matchStartTime,
+          isMatchActive: window.teamManager.isMatchActive
+        });
+      }
     });
   }
 
@@ -258,8 +267,15 @@ class TeacherDashboard {
 
   saveSettingsFromModal() {
     window.teamManager.applyTeamsConfig(window.teamManager.teams, true);
+    window.teamManager.broadcast('ROOM_STATE_SYNC', {
+      teams: window.teamManager.teams,
+      stageIdx: this.currentStageIdx,
+      matchStartTime: window.teamManager.matchStartTime,
+      isMatchActive: window.teamManager.isMatchActive
+    });
     this.modalSettings.classList.add('hidden');
-    this.showToast('모둠 구성 및 인원수가 저장되고 학생들에게 동기화되었습니다!');
+    this.renderTeamsLive();
+    this.showToast('모둠 구성 및 인원수가 저장되고 학생들에게 즉시 동기화되었습니다!');
   }
 
   showBigQrModal() {
