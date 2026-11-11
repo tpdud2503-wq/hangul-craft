@@ -219,6 +219,13 @@
   box-shadow: var(--shadow-subtle);
 }
 
+.t-room-guide {
+  flex-basis: 100%;
+  color: var(--ink-gray);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
 .prob-select-group {
   display: flex;
   align-items: center;
@@ -265,6 +272,11 @@
 
 .t-action-btn.primary:hover {
   background: #143e5e;
+}
+
+.t-action-btn:disabled, .ctrl-btn:disabled, .t-url-box button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .t-action-btn.highlight {
@@ -447,7 +459,30 @@
 }
 
 @media (max-width: 992px) {
-  .teacher-main-layout {
-    grid-template-columns: 1fr;
+  .teacher-header {
+    flex-wrap: wrap;
+    gap: 12px;
   }
+  .t-header-right, .t-btn-group {
+    flex-wrap: wrap;
+  }
+  .teacher-main-layout {
+    display: flex;
+    flex-direction: column;
+  }
+  .t-battle-section { display: contents; }
+  .t-control-bar { order: 0; width: 100%; }
+  .t-qr-sidebar { order: 1; width: 100%; }
+  .t-teams-grid-container { order: 2; width: 100%; }
+  .t-teams-cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+}
+
+@media (max-width: 600px) {
+  .teacher-dashboard-body { padding: 12px; }
+  .teacher-header { padding: 14px; }
+  .t-titles h1 { font-size: 1.2rem; flex-wrap: wrap; }
+  .t-header-right, .t-btn-group { width: 100%; }
+  .room-pill { width: 100%; flex-wrap: wrap; }
+  .t-btn-group .t-action-btn { flex: 1 1 100%; }
+  .t-qr-card { position: static; }
 }

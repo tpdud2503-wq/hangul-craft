@@ -42,6 +42,7 @@
     .student-room-form { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; padding: 16px; background: #fff; border: 1px solid var(--border-ink); border-radius: 10px; }
     .student-room-form input { max-width: 12em; padding: 8px; text-transform: uppercase; }
     .student-room-form button { padding: 8px 14px; cursor: pointer; }
+    .student-room-form-help { width: 100%; color: var(--ink-gray); font-size: 0.9rem; line-height: 1.5; }
     .student-room-form.hidden { display: none; }
   </style>
 </head>
@@ -60,6 +61,7 @@
     </header>
 
     <form id="student-room-form" class="student-room-form hidden">
+      <p id="student-room-help" class="student-room-form-help">선생님이 알려 준 방 코드를 입력해 주세요.</p>
       <label for="student-room-input">선생님이 알려 준 방 코드:</label>
       <input id="student-room-input" type="text" minlength="5" maxlength="8" pattern="[A-Za-z0-9]{5,8}" autocomplete="off" required>
       <button type="submit" class="royal-btn">방 입장</button>

@@ -42,6 +42,7 @@ class StudentGame {
     this.cloudStatus = document.getElementById('student-cloud-status');
     this.roomForm = document.getElementById('student-room-form');
     this.roomInput = document.getElementById('student-room-input');
+    this.roomHelp = document.getElementById('student-room-help');
     this.selectionKey = `hangul_student_selection_${window.cloudSync && window.cloudSync.roomId || 'local'}`;
     this.selectMyTeam = document.getElementById('select-my-team');
     this.selectMyMember = document.getElementById('select-my-member');
@@ -220,10 +221,16 @@ class StudentGame {
     this.updateTeamSelect();
     if (window.cloudSync) {
       this.roomDisplay.textContent = window.cloudSync.roomId || '미입장';
-      this.roomForm.classList.toggle('hidden', Boolean(window.cloudSync.roomId));
       window.cloudSync.onStatusChange((connected, text) => {
         this.cloudStatus.textContent = text;
-        this.cloudStatus.className = `cloud-status-dot ${connected ? 'online' : 'offline'}`;
+        const statusClass = !connected ? 'offline' : window.cloudSync.realtimeReady ? 'online' : 'fallback';
+        this.cloudStatus.className = `cloud-status-dot ${statusClass}`;
+        const missing = window.cloudSync.waitingForRoom;
+        this.roomForm.classList.toggle('hidden', Boolean(window.cloudSync.roomId) && !missing);
+        this.roomHelp.textContent = missing
+          ? `방 ${window.cloudSync.roomId}을 찾지 못했습니다. 선생님 화면의 연결 상태와 방 코드가 같은지 확인해 주세요.`
+          : '선생님이 알려 준 방 코드를 입력해 주세요.';
+        if (missing && !this.roomInput.value) this.roomInput.value = window.cloudSync.roomId;
         this.updateTeamStatus();
       });
     }

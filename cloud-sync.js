@@ -15,7 +15,10 @@ class CloudSync {
     this.channel = null;
     this.role = null;
     this.realtimeReady = false;
+    this.pollingMode = false;
+    this.waitingForRoom = false;
     this.hasRoomState = false;
+    this.roomAvailable = false;
     this.isConnected = false;
     this.statusText = 'Supabase 연결 중...';
     this.statusListeners = [];
@@ -105,12 +108,18 @@ class CloudSync {
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
       });
       this.subscribe();
+      // 방 생성은 WebSocket 구독과 독립적으로 진행한다.
+      this.ensureRoom().catch(error => this.handleRoomError(error));
       window.addEventListener('online', () => this.refreshIfConnected());
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) this.refreshIfConnected();
       });
-      // 잠자기 등으로 놓친 이벤트도 다시 읽는다.
-      this.pollTimer = window.setInterval(() => this.refreshIfConnected(), 15000);
+      // WebSocket이 차단되면 3초마다, 정상 연결 중에는 15초마다 상태를 확인한다.
+      let ticks = 0;
+      this.pollTimer = window.setInterval(() => {
+        ticks++;
+        if (this.pollingMode || ticks % 5 === 0) this.refreshIfConnected();
+      }, 3000);
     } catch (err) {
       console.error('Supabase 초기화 오류:', err);
       this.notifyStatus(false, '연결 실패: 인터넷을 확인해 주세요');
@@ -137,20 +146,37 @@ class CloudSync {
       .subscribe(async (status, err) => {
         if (status === 'SUBSCRIBED') {
           this.realtimeReady = true;
+          this.pollingMode = false;
           try {
             await this.ensureRoom();
           } catch (error) {
-            console.error('방 연결 오류:', error);
-            this.notifyStatus(false, error.code === 'ROOM_COLLISION'
-              ? '방 코드가 이미 사용 중입니다. 새 창에서 다시 시작해 주세요'
-              : '방 연결 오류 (재시도 중)');
+            this.handleRoomError(error);
           }
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           if (err) console.warn('Supabase Realtime:', status, err);
           this.realtimeReady = false;
-          this.notifyStatus(false, '실시간 연결이 끊겼습니다 (재연결 중)');
+          this.pollingMode = true;
+          if (this.roomAvailable) this.notifyStatus(true, '자동 동기화 중 (약 3초 간격)');
+          else this.notifyStatus(false, '실시간 연결이 차단되어 방을 확인 중입니다');
+          this.refreshIfConnected();
         }
       });
+  }
+
+  handleRoomError(error) {
+    console.error('방 연결 오류:', error);
+    this.roomAvailable = false;
+    this.notifyStatus(false, error.code === 'ROOM_COLLISION'
+      ? '방 코드가 이미 사용 중입니다. 새 창에서 다시 시작해 주세요'
+      : '방 연결 오류: 인터넷 상태를 확인해 주세요');
+  }
+
+  notifyRoomMissing() {
+    this.roomAvailable = false;
+    this.waitingForRoom = this.role === 'student';
+    this.notifyStatus(false, this.waitingForRoom
+      ? '교사 방을 찾을 수 없습니다. 교사의 연결 상태와 방 코드를 확인해 주세요'
+      : '교사 방을 찾을 수 없습니다. 페이지를 새로고침해 주세요');
   }
 
   async fetchRoom() {
@@ -198,7 +224,7 @@ class CloudSync {
       if (!room && this.role === 'teacher') room = await this.createRoom();
     }
     if (room) this.applyRoom(room);
-    else this.notifyStatus(false, '교사의 방이 열리기를 기다리는 중');
+    else this.notifyRoomMissing();
   }
 
   ensureRoom() {
@@ -209,16 +235,17 @@ class CloudSync {
   async syncRoomFromDatabase() {
     const room = await this.fetchRoom();
     if (room) this.applyRoom(room);
-    else this.notifyStatus(false, '교사의 방이 열리기를 기다리는 중');
+    else this.notifyRoomMissing();
     return room;
   }
 
   refreshIfConnected() {
-    if (!this.realtimeReady || !this.supabase || this.roomCollision) return Promise.resolve();
+    if ((!this.realtimeReady && !this.pollingMode) || !this.supabase || this.roomCollision) return Promise.resolve();
     if (this.refreshPromise) return this.refreshPromise;
     const refresh = this.role === 'teacher' && !this.hasRoomState ? this.ensureRoom() : this.syncRoomFromDatabase();
     this.refreshPromise = refresh.catch(error => {
       console.warn('방 상태 동기화 실패:', error);
+      this.roomAvailable = false;
       this.notifyStatus(false, error.code === 'ROOM_COLLISION'
         ? '방 코드가 이미 사용 중입니다. 새 창에서 다시 시작해 주세요'
         : '방 상태 확인 실패 (재시도 중)');
@@ -230,6 +257,7 @@ class CloudSync {
     if (!room || room.room_id !== this.roomId || !window.teamManager ||
         (this.role === 'teacher' && this.generatedRoom && !this.generatedRoomClaimed)) return;
     if (!window.RoomState.isValidRoom(room)) {
+      this.roomAvailable = false;
       this.notifyStatus(false, '방 데이터가 올바르지 않습니다');
       return;
     }
@@ -262,7 +290,11 @@ class CloudSync {
       window.game.updateTeamStatus();
     }
     this.hasRoomState = true;
+    this.roomAvailable = true;
+    this.waitingForRoom = false;
     if (this.realtimeReady) this.notifyStatus(true, 'Supabase 실시간 연결됨 🟢');
+    else if (this.pollingMode) this.notifyStatus(true, '자동 동기화 중 (약 3초 간격)');
+    else this.notifyStatus(false, '방을 확인했습니다. 실시간 연결 중입니다');
   }
 
   publish(data) {

@@ -1327,6 +1327,12 @@ body {
   color: #e03131;
 }
 
+.cloud-status-dot.fallback {
+  background: #fff3bf;
+  color: #855300;
+  font-weight: 700;
+}
+
 /* ==================== QR코드 모달 ==================== */
 .qrcode-card {
   background: #ffffff;

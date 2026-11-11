@@ -36,6 +36,9 @@ class TeacherDashboard {
     this.tQrcodeContainer = document.getElementById('t-qrcode-container');
     this.tQrRoomText = document.getElementById('t-qr-room-text');
     this.tJoinUrlInput = document.getElementById('t-join-url-input');
+    this.tQrPending = document.getElementById('t-qr-pending');
+    this.tQrReady = document.getElementById('t-qr-ready');
+    this.tRoomGuide = document.getElementById('t-room-guide');
 
     this.tStageSelect = document.getElementById('t-stage-select');
     this.btnStartProblem = document.getElementById('btn-t-start-problem');
@@ -145,7 +148,19 @@ class TeacherDashboard {
 
     window.cloudSync.onStatusChange((connected, text) => {
       this.tCloudStatusEl.textContent = text;
-      this.tCloudStatusEl.className = `cloud-status-dot ${connected ? 'online' : 'offline'}`;
+      const statusClass = !connected ? 'offline' : window.cloudSync.realtimeReady ? 'online' : 'fallback';
+      this.tCloudStatusEl.className = `cloud-status-dot ${statusClass}`;
+      this.tQrPending.classList.toggle('hidden', connected);
+      this.tQrReady.classList.toggle('hidden', !connected);
+      this.tQrPending.textContent = `QR코드 준비 중입니다. ${text}`;
+      this.tRoomGuide.textContent = !connected
+        ? '교사 방은 자동으로 열립니다. 연결이 완료되면 학생에게 QR을 보여 주세요.'
+        : window.cloudSync.realtimeReady
+          ? '교사 방이 열렸습니다. 학생이 QR로 입장한 뒤 문제 시작을 눌러 주세요.'
+          : '교사 방이 열렸습니다. 실시간 연결이 차단되어 약 3초 간격으로 동기화합니다.';
+      document.getElementById('btn-t-qr-toggle').disabled = !connected;
+      document.getElementById('btn-t-copy-url').disabled = !connected;
+      this.tJoinUrlInput.disabled = !connected;
       this.btnStartProblem.disabled = !connected;
       this.tStageSelect.disabled = !connected;
       document.getElementById('btn-t-settings').disabled = !connected;
