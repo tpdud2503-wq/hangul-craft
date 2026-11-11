@@ -100,3 +100,10 @@ test('database polling keeps a room usable when realtime is blocked', async () =
   assert.equal(sync.waitingForRoom, true);
   assert.match(sync.statusText, /방 코드/);
 });
+
+test('join links keep the room code and specify the current release', () => {
+  const sync = createClient({ conflicts: 0, room: makeRoom() });
+  const url = new URL(sync.getJoinUrl());
+  assert.equal(url.searchParams.get('room'), 'ABC234');
+  assert.equal(url.searchParams.get('v'), '20261111-2');
+});

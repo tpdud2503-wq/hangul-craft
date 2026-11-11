@@ -4,6 +4,8 @@ const SUPABASE_CONFIG = {
   url: 'https://lyrngmakrvcynuahxoba.supabase.co',
   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5cm5nbWFrcnZjeW51YWh4b2JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNzU2NzUsImV4cCI6MjEwOTk1MTY3NX0.1rwLrDh4fkyTfW9aiDkxkiicw0NRrsdHqK-23aMYUaE'
 };
+// HTML의 정적 파일 버전과 함께 갱신해 오래된 화면·스크립트 혼용을 방지한다.
+const APP_VERSION = '20261111-2';
 
 class CloudSync {
   constructor() {
@@ -60,6 +62,7 @@ class CloudSync {
     url.search = '';
     url.hash = '';
     if (this.roomId) url.searchParams.set('room', this.roomId);
+    url.searchParams.set('v', APP_VERSION);
     return url.toString();
   }
 
