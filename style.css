@@ -2179,8 +2179,12 @@ body {
 }
 
 @keyframes pulseSubmit {
-  0% { transform: scale(1); box-shadow: 0 4px 12px rgba(43, 138, 62, 0.3); }
-  100% { transform: scale(1.03); box-shadow: 0 8px 24px rgba(43, 138, 62, 0.6); }
+  0% { box-shadow: 0 4px 12px rgba(43, 138, 62, 0.3); }
+  100% { box-shadow: 0 8px 24px rgba(43, 138, 62, 0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-student-submit.ready-to-submit { animation: none; }
 }
 
 .submit-status-message {
@@ -2253,4 +2257,3 @@ body {
   color: #862e9c;
   font-weight: 600;
 }
-

@@ -13,6 +13,10 @@ const STAGES = [
   { word: '훈민정음', title: '제8장: 백성을 가르치는 바른 소리', desc: '모든 원리가 총망라된 우리 글자의 영원한 이름입니다.', story: '지혜로운 자는 아침나절에 깨칠 수 있고, 어리석은 자라도 열흘이면 배울 수 있는 만고의 문자입니다.' }
 ];
 
+const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[char]);
+
 class StudentGame {
   constructor() {
     this.currentStageIdx = 0;
@@ -27,6 +31,7 @@ class StudentGame {
     this.vowelSlots = [];
 
     this.initDOM();
+    this.restoreStudentSelection();
     this.bindEvents();
     this.initCloud();
     this.loadStage(0, false);
@@ -34,6 +39,10 @@ class StudentGame {
 
   initDOM() {
     this.roomDisplay = document.getElementById('student-room-display');
+    this.cloudStatus = document.getElementById('student-cloud-status');
+    this.roomForm = document.getElementById('student-room-form');
+    this.roomInput = document.getElementById('student-room-input');
+    this.selectionKey = `hangul_student_selection_${window.cloudSync && window.cloudSync.roomId || 'local'}`;
     this.selectMyTeam = document.getElementById('select-my-team');
     this.selectMyMember = document.getElementById('select-my-member');
     this.studentStatusBadge = document.getElementById('student-status-badge');
@@ -87,9 +96,33 @@ class StudentGame {
     this.submitTeamStatusText = document.getElementById('submit-team-status-text');
     this.teamRankBanner = document.getElementById('team-rank-banner');
     this.isSubmitted = false;
+    this.isSubmitting = false;
+  }
+
+  restoreStudentSelection() {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(this.selectionKey));
+      if (saved && Number.isInteger(saved.teamId) && Number.isInteger(saved.memberId)) {
+        window.teamManager.currentStudent.teamId = saved.teamId;
+        window.teamManager.currentStudent.memberId = saved.memberId;
+      }
+    } catch (_) {
+      // 사용할 수 없는 저장소에서는 기본 선택을 사용한다.
+    }
   }
 
   bindEvents() {
+    this.roomForm.addEventListener('submit', event => {
+      event.preventDefault();
+      const room = this.roomInput.value.trim().toUpperCase();
+      if (!/^[A-Z0-9]{5,8}$/.test(room)) {
+        this.showToast('방 코드는 영문과 숫자 5~8자리입니다.');
+        return;
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.set('room', room);
+      window.location.assign(url.toString());
+    });
     this.tabConsonant.addEventListener('click', () => this.switchTab('consonant'));
     this.tabVowel.addEventListener('click', () => this.switchTab('vowel'));
 
@@ -110,9 +143,11 @@ class StudentGame {
     // 팀 선택 변경
     this.selectMyTeam.addEventListener('change', () => {
       this.updateMemberSelect();
+      this.loadStage(this.currentStageIdx, false);
       this.updateTeamStatus();
     });
     this.selectMyMember.addEventListener('change', () => {
+      this.loadStage(this.currentStageIdx, false);
       this.updateTeamStatus();
     });
 
@@ -170,23 +205,28 @@ class StudentGame {
 
     // 팀 매니저 업데이트 콜백: 모둠 설정(인원수)이나 학생 완료 상태 변경 시 드롭다운과 상태 즉시 갱신!
     window.teamManager.onUpdate(() => {
+      const previousTeam = this.selectMyTeam.value;
+      const previousMember = this.selectMyMember.value;
       this.updateTeamSelect();
+      if (this.syllables.length && previousTeam && previousMember &&
+          (previousTeam !== this.selectMyTeam.value || previousMember !== this.selectMyMember.value)) {
+        this.loadStage(this.currentStageIdx, false);
+      }
       this.updateTeamStatus();
     });
   }
 
   initCloud() {
+    this.updateTeamSelect();
     if (window.cloudSync) {
-      this.roomDisplay.textContent = window.cloudSync.roomId;
-      window.cloudSync.onStatusChange((connected) => {
-        if (connected) {
-          window.teamManager.broadcast('REQUEST_ROOM_STATE', {});
-        }
+      this.roomDisplay.textContent = window.cloudSync.roomId || '미입장';
+      this.roomForm.classList.toggle('hidden', Boolean(window.cloudSync.roomId));
+      window.cloudSync.onStatusChange((connected, text) => {
+        this.cloudStatus.textContent = text;
+        this.cloudStatus.className = `cloud-status-dot ${connected ? 'online' : 'offline'}`;
+        this.updateTeamStatus();
       });
     }
-    // 최초 접속 시 교사에게 현재 방 상태 요청
-    window.teamManager.broadcast('REQUEST_ROOM_STATE', {});
-    this.updateTeamSelect();
   }
 
   updateTeamSelect() {
@@ -233,6 +273,11 @@ class StudentGame {
     const teamId = parseInt(this.selectMyTeam.value, 10);
     const memberId = parseInt(this.selectMyMember.value, 10);
     window.teamManager.setCurrentStudent(teamId, memberId);
+    this.selectMyTeam.disabled = this.isSubmitting;
+    this.selectMyMember.disabled = this.isSubmitting;
+    if (Number.isInteger(teamId) && Number.isInteger(memberId)) {
+      try { sessionStorage.setItem(this.selectionKey, JSON.stringify({ teamId, memberId })); } catch (_) {}
+    }
 
     const team = window.teamManager.teams.find(t => t.id === teamId);
     if (!team) return;
@@ -248,16 +293,22 @@ class StudentGame {
       this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = '제출 완료! (다음 스텝 준비 완료)';
       this.submitStatusMsg.classList.remove('hidden');
     } else {
-      this.studentStatusBadge.textContent = '풀이 중 ✍️';
+      this.isSubmitted = false;
+      this.studentStatusBadge.textContent = window.teamManager.isMatchActive ? '풀이 중 ✍️' : '교사 시작 대기';
       this.studentStatusBadge.className = 'student-status-chip solving';
-      if (!this.checkAllCompleted()) {
-        this.isSubmitted = false;
-        this.btnStudentSubmit.disabled = true;
-        this.btnStudentSubmit.classList.remove('ready-to-submit', 'submitted');
-        this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = '⏳';
-        this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = '모든 글자를 완성한 후 제출할 수 있습니다';
-        this.submitStatusMsg.classList.add('hidden');
-      }
+      const connected = !window.cloudSync || window.cloudSync.isConnected;
+      const ready = this.checkAllCompleted() && window.teamManager.isMatchActive && connected && !this.isSubmitting;
+      this.btnStudentSubmit.disabled = !ready;
+      this.btnStudentSubmit.classList.remove('ready-to-submit', 'submitted');
+      this.btnStudentSubmit.classList.toggle('ready-to-submit', ready);
+      this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = ready ? '🚀' : '⏳';
+      this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = this.isSubmitting
+        ? '제출을 저장하는 중입니다...'
+        : !connected ? '실시간 연결을 기다리고 있습니다'
+        : !window.teamManager.isMatchActive ? '선생님이 문제를 시작하면 제출할 수 있습니다'
+        : ready ? '과제 완성! [제출 및 다음 스텝 준비 완료] 체크하기'
+        : '모든 글자를 완성한 후 제출할 수 있습니다';
+      this.submitStatusMsg.classList.add('hidden');
     }
 
     const doneCount = team.members.filter(m => m.completed).length;
@@ -270,16 +321,17 @@ class StudentGame {
 
     // 우리 모둠이 완주했을 때 등수 배너 및 모달 즉시 표시
     if (team.isAllCompleted) {
-      this.teamProgressText.innerHTML = `<strong>전원 완성! (${team.rank}등 🏆)</strong>`;
+      const rank = Number(team.rank) || 0;
+      this.teamProgressText.textContent = `전원 완성! (${rank}등 🏆)`;
       this.teamRankBanner.classList.remove('hidden');
       const medalIcons = ['🥇', '🥈', '🥉'];
-      const icon = medalIcons[team.rank - 1] || '🎖️';
+      const icon = medalIcons[rank - 1] || '🎖️';
       this.teamRankBanner.innerHTML = `
         <div class="team-rank-banner-inner">
           <span class="rank-banner-medal">${icon}</span>
           <div class="rank-banner-text">
-            <strong>우리 모둠 완주 성공! [${team.rank}등] 달성!</strong>
-            <span>완주 소요 시간: ${team.completedTime}초 | 획득 점수: +${[100, 80, 60, 40, 20, 10][team.rank - 1] || 10}점</span>
+            <strong>우리 모둠 완주 성공! [${rank}등] 달성!</strong>
+            <span>완주 소요 시간: ${escapeHtml(team.completedTime)}초 | 획득 점수: +${[100, 80, 60, 40, 20, 10][rank - 1] || 10}점</span>
           </div>
         </div>
       `;
@@ -288,31 +340,31 @@ class StudentGame {
     }
   }
 
-  handleStudentSubmit() {
-    if (!this.checkAllCompleted() || this.isSubmitted) return;
+  async handleStudentSubmit() {
+    if (!this.checkAllCompleted() || this.isSubmitted || this.isSubmitting ||
+        !window.teamManager.isMatchActive || (window.cloudSync && !window.cloudSync.isConnected)) return;
 
-    this.isSubmitted = true;
-    const cur = window.teamManager.currentStudent;
-    window.teamManager.recordMemberCompletion(cur.teamId, cur.memberId);
-
-    window.soundEngine.playPyeongyeong(880);
-
-    this.btnStudentSubmit.disabled = true;
-    this.btnStudentSubmit.classList.remove('ready-to-submit');
-    this.btnStudentSubmit.classList.add('submitted');
-    this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = '✅';
-    this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = '제출 완료! (다음 스텝 준비 완료)';
-    this.submitStatusMsg.classList.remove('hidden');
-
-    this.studentStatusBadge.textContent = '준비 완료 ✓';
-    this.studentStatusBadge.className = 'student-status-chip completed';
-
-    this.showToast('과제가 제출되었습니다! 다음 스텝 준비 완료로 체크되었습니다. 👍');
-
-    // 모둠원 전원 완성인지 확인
-    const team = window.teamManager.teams.find(t => t.id === cur.teamId);
-    if (team && team.isAllCompleted) {
-      setTimeout(() => this.celebrateWordComplete(), 400);
+    const cur = { ...window.teamManager.currentStudent };
+    const stage = this.currentStageIdx;
+    const round = window.teamManager.matchStartTime;
+    this.isSubmitting = true;
+    this.updateTeamStatus();
+    try {
+      await window.teamManager.recordMemberCompletion(cur.teamId, cur.memberId);
+      if (this.currentStageIdx !== stage || window.teamManager.matchStartTime !== round) return;
+      window.soundEngine.playPyeongyeong(880);
+      this.showToast('과제가 제출되었습니다! 다음 스텝 준비 완료로 체크되었습니다. 👍');
+      const team = window.teamManager.teams.find(t => t.id === cur.teamId);
+      if (team && team.isAllCompleted) setTimeout(() => {
+        const selected = window.teamManager.currentStudent;
+        if (this.currentStageIdx === stage && window.teamManager.matchStartTime === round &&
+            selected.teamId === cur.teamId && selected.memberId === cur.memberId) this.celebrateWordComplete();
+      }, 400);
+    } catch (error) {
+      this.showToast(error.code === 'ROUND_CHANGED' ? error.message : '제출을 확인하지 못했습니다. 연결을 확인하고 다시 눌러 주세요.');
+    } finally {
+      this.isSubmitting = false;
+      this.updateTeamStatus();
     }
   }
 
@@ -429,11 +481,7 @@ class StudentGame {
 
           if (this.checkAllCompleted()) {
             if (!this.isSubmitted && this.btnStudentSubmit) {
-              this.btnStudentSubmit.disabled = false;
-              this.btnStudentSubmit.classList.add('ready-to-submit');
-              this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = '🚀';
-              this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = '과제 완성! [제출 및 다음 스텝 준비 완료] 체크하기';
-              this.showToast('단어를 완성했습니다! 아래 [제출 및 다음 스텝 준비 완료] 버튼을 눌러 제출하세요. 🎉');
+              this.showToast('단어를 완성했습니다! 시작된 문제라면 아래 제출 버튼을 눌러 주세요. 🎉');
               window.soundEngine.playWordComplete();
             }
           } else {
@@ -457,11 +505,13 @@ class StudentGame {
       syl.isDone = false;
       this.activeCharPreviewEl.textContent = '?';
       this.activeCharPreviewEl.classList.remove('match-success');
+      this.renderWordCards();
     }
+    this.updateTeamStatus();
   }
 
   checkAllCompleted() {
-    return this.syllables.every(s => s.isDone);
+    return this.syllables.length > 0 && this.syllables.every(s => s.isDone);
   }
 
   celebrateWordComplete() {
@@ -485,8 +535,8 @@ class StudentGame {
       if (team.isAllCompleted) {
         modalTeamInfo.innerHTML = `
           <div class="team-all-done-banner">
-            🎉 <strong>${team.name}</strong> 전원 완성! <br>
-            <strong>우리 모둠 등수: <span class="rank-highlight">${team.rank}등 🏆</span></strong> (소요 시간: ${team.completedTime}초)
+            🎉 <strong>${escapeHtml(team.name)}</strong> 전원 완성! <br>
+            <strong>우리 모둠 등수: <span class="rank-highlight">${Number(team.rank) || 0}등 🏆</span></strong> (소요 시간: ${escapeHtml(team.completedTime)}초)
           </div>
         `;
       } else {
@@ -834,4 +884,5 @@ class StudentGame {
 
 window.addEventListener('DOMContentLoaded', () => {
   window.game = new StudentGame();
+  if (window.cloudSync) window.cloudSync.start('student');
 });

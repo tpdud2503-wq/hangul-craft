@@ -5,17 +5,22 @@
 
 ---
 
-## ⚡ 가장 쉬운 배포 방법: Netlify Drop (단 30초 소요!)
+## ⚡ Netlify Drop 정적 배포
 
 PowerShell이나 깃(Git) 설치가 전혀 필요 없는 가장 쉬운 방법입니다.
 
 1. 웹 브라우저(크롬 등)에서 [https://app.netlify.com/drop](https://app.netlify.com/drop) 에 접속합니다.
    *(무료 회원가입 또는 구글 계정으로 로그인)*
-2. 화면 가운데에 나타나는 **점선 상자("Drag and drop your site folder here")**에  
-   현재 프로젝트 폴더(`C:\Users\user\Desktop\orca`) 전체를 **마우스로 끌어다 놓습니다(Drag & Drop)**.
-3. 5~10초 후 업로드가 완료되면, 화면에 나만의 무료 웹사이트 주소가 즉시 나타납니다!  
+2. 별도의 배포 폴더를 만들고 아래 공개 파일만 복사합니다. `.git`, `.agents`, `opencode.json`, 테스트 파일 등은 올리지 마세요.
+   * `index.html`, `teacher.html`, `student.html`, `style.css`, `teacher.css`
+   * `room-state.js`, `cloud-sync.js`, `team-manager.js`, `teacher.js`, `student.js`
+   * `hangul-engine.js`, `sound-engine.js`, `lesson-explanation.js`, `qr-helper.js`, `qrcode.min.js`
+3. 화면 가운데 점선 상자에 이 배포 폴더를 끌어다 놓습니다.
+4. 업로드가 완료되면 화면에 웹사이트 주소가 나타납니다.
    *(예: `https://hangul-craft-battle.netlify.app`)*
-4. **끝입니다!** 이제 전 세계 어디서든, 어떤 스마트폰으로든 이 주소로 접속할 수 있습니다.
+5. 교사와 학생은 이 웹 주소를 열고, 같은 방 코드로 참여합니다. Supabase 연결을 위해 인터넷이 필요합니다.
+
+QR코드는 보통 브라우저에서 직접 생성됩니다. 주소가 매우 길어 로컬 생성이 불가능한 경우에는 `api.qrserver.com`으로 참여 주소가 전달됩니다.
 
 ---
 
@@ -24,7 +29,7 @@ PowerShell이나 깃(Git) 설치가 전혀 필요 없는 가장 쉬운 방법입
 1. [https://github.com](https://github.com)에 로그인 후, 우측 상단 **[+]** ➔ **[New repository]**를 누릅니다.
 2. 저장소 이름(Repository name)에 `hangul` 등을 입력하고 **[Create repository]**를 누릅니다.
 3. 화면 가운데의 **"uploading an existing file"** 링크를 누릅니다.
-4. 폴더 안의 파일들(`index.html`, `style.css`, `game.js`, `team-manager.js`, `lesson-explanation.js`, `cloud-sync.js`, `qrcode.min.js`, `hangul-engine.js`, `sound-engine.js` 등)을 모두 선택하여 끌어다 놓고 **[Commit changes]**를 누릅니다.
+4. 위의 공개 파일 목록을 업로드하고 **[Commit changes]**를 누릅니다. 특히 `teacher.html`, `student.html`, `room-state.js`를 빠뜨리지 마세요.
 5. 저장소 상단의 **[Settings]** ➔ 좌측 메뉴 **[Pages]** ➔ Source를 **[Deploy from a branch (main)]**으로 선택하고 **[Save]**를 누릅니다.
 6. 1~2분 뒤 `https://내아이디.github.io/hangul` 주소로 사이트가 배포됩니다!
 
@@ -43,17 +48,19 @@ PowerShell이나 깃(Git) 설치가 전혀 필요 없는 가장 쉬운 방법입
 ```
 
 ### 1단계: 교사 화면 준비
-* 배포된 웹 주소로 교사 PC(전자칠판 또는 빔프로젝터 연결)에서 접속합니다.
-* 상단 헤더의 **[📱 학생 참여 QR]** 버튼을 누르면 화면에 커다란 QR코드와 방 코드가 나타납니다.
+* 배포된 웹 주소에서 **선생님**을 선택하고 연결 상태가 `Supabase 실시간 연결됨`인지 확인합니다.
+* **[📱 학생 QR 크게보기]** 버튼을 누르면 QR코드와 방 코드가 나타납니다.
 
 ### 2단계: 학생 스마트폰/태블릿 입장
 * 학생들은 별도의 앱 설치나 회원가입 없이, 스마트폰의 **기본 카메라 앱을 켜서 칠판의 QR코드**를 비춥니다.
-* 화면에 나타나는 알림 링크를 탭하면 바로 같은 방으로 접속됩니다!
-* 상단에서 **[내 모둠]**과 **[학생 번호]**를 고르고 문제를 풉니다.
+* 화면에 나타나는 알림 링크를 탭하면 같은 방으로 접속됩니다. QR을 사용할 수 없다면 학생 화면에서 방 코드를 직접 입력합니다.
+* 상단에서 **[내 모둠]**과 **[이름/학생 번호]**를 고르고 문제를 풉니다.
 
 ### 3단계: 실시간 모둠 대항전
-* 학생이 단어를 조립하여 완성하면 모둠원 진척도가 실시간으로 올라갑니다.
+* 교사가 문제를 선택하거나 일괄 시작한 뒤 학생이 단어를 완성하고 **제출**을 누르면 진척도가 올라갑니다.
 * **모둠원 전원이 모두 완성을 끝내면**, 교사 화면의 **모둠 전광판**에 1등(🥇), 2등(🥈), 3등(🥉) 등수가 실시간으로 발표되며 축하 팡파르가 울립니다.
 
 ### 4단계: 교과 심층 해설 슬라이드
-* 교사가 **[📖 문제 해설 보기]** 버튼을 누르면 단어에 담긴 초성·중성·종성의 제자 원리와 탐구 토의 질문이 담긴 대형 슬라이드가 열려 깔끔하게 수업을 정리할 수 있습니다.
+* 교사가 **[💡 문제 심층 해설 슬라이드 열기]**를 누르면 단어에 담긴 창제 원리와 탐구 토의 질문을 볼 수 있습니다.
+
+> 현재 방은 익명으로 누구나 조회·변경할 수 있습니다. 학생 개인정보나 평가 결과를 저장하지 마세요. 자세한 내용은 [README 보안 주의](README.md#보안-주의)를 확인하세요.

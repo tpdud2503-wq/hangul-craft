@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -22,10 +22,28 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  let reqPath = req.url.split('?')[0];
+  let reqPath;
+  try {
+    reqPath = decodeURIComponent(req.url.split('?')[0]);
+  } catch (_) {
+    res.writeHead(400);
+    res.end('Bad Request');
+    return;
+  }
+  if (reqPath === '/__classroom_config') {
+    res.writeHead(200, { 'Content-Type': MIME_TYPES['.json'], 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ joinOrigin: `http://${getLocalIp()}:${PORT}` }));
+    return;
+  }
   if (reqPath === '/') reqPath = '/index.html';
 
-  const filePath = path.join(__dirname, reqPath);
+  const relativePath = reqPath.replace(/^[/\\]+/, '');
+  const filePath = path.resolve(__dirname, relativePath);
+  if (!filePath.startsWith(__dirname + path.sep) || relativePath.split(/[/\\]/).some(part => part.startsWith('.'))) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
@@ -47,7 +65,12 @@ const server = http.createServer((req, res) => {
 
 function getLocalIp() {
   const nets = os.networkInterfaces();
-  for (const name of Object.keys(nets)) {
+  const names = Object.keys(nets).sort((a, b) => {
+    const priority = name => /virtual|vethernet|vmware|hyper-v/i.test(name) ? 3 :
+      /wi-?fi|wireless|wlan/i.test(name) ? 0 : /ethernet/i.test(name) ? 1 : 2;
+    return priority(a) - priority(b);
+  });
+  for (const name of names) {
     for (const net of nets[name]) {
       if (net.family === 'IPv4' && !net.internal) {
         return net.address;

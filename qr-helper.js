@@ -1,8 +1,6 @@
 /**
- * 고해상도 QR코드 렌더링 헬퍼
- * - 스마트폰 카메라 인식률 100% 보장 (충분한 흰색 여백 Quiet Zone 확보)
- * - 온라인 시 고화질 QR 이미지(320x320) + 오프라인 시 로컬 Canvas 이중 지원
- * - 학생용 플레이 주소(student.html?room=XXX)로 바로 연결
+ * 학생 참여 주소를 흰 여백이 있는 QR코드로 표시한다.
+ * 가능한 한 로컬에서 생성하고, 지원 길이를 초과한 경우에만 외부 서비스를 사용한다.
  */
 
 const QrHelper = {
@@ -10,7 +8,34 @@ const QrHelper = {
     if (!containerEl) return;
     containerEl.innerHTML = '';
 
-    // 1. 온라인 고화질 이미지 시도 (가장 카메라 인식이 잘 됨)
+    if (window.QRCode) {
+      try {
+        const frame = document.createElement('div');
+        const padding = Math.ceil(size * 0.12);
+        const codeSize = size - padding * 2;
+        frame.style.width = `${size}px`;
+        frame.style.maxWidth = '100%';
+        frame.style.padding = `${padding}px`;
+        frame.style.boxSizing = 'border-box';
+        frame.style.background = '#fff';
+        frame.setAttribute('role', 'img');
+        frame.setAttribute('aria-label', '학생 참여 QR코드');
+        new window.QRCode(frame, {
+          text: url, width: codeSize, height: codeSize,
+          colorDark: '#000000', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M
+        });
+        const canvas = frame.querySelector('canvas');
+        canvas.style.display = 'block';
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+        containerEl.appendChild(frame);
+        return;
+      } catch (error) {
+        console.warn('로컬 QR 생성 실패, 외부 이미지로 대체합니다.', error);
+      }
+    }
+
+    // 로컬 QR이 지원하지 않는 긴 주소는 외부 이미지로 표시한다.
     const img = document.createElement('img');
     const encodedUrl = encodeURIComponent(url);
     img.src = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=15&data=${encodedUrl}`;
@@ -21,20 +46,8 @@ const QrHelper = {
     img.style.display = 'block';
     img.style.borderRadius = '8px';
 
-    // 로드 실패 시(오프라인 등) 로컬 QRCode 라이브러리로 대체
     img.onerror = () => {
-      console.warn('QR API 로드 실패, 로컬 Canvas로 대체합니다.');
-      containerEl.innerHTML = '';
-      if (window.QRCode) {
-        new window.QRCode(containerEl, {
-          text: url,
-          width: size,
-          height: size,
-          colorDark: '#000000',
-          colorLight: '#ffffff',
-          correctLevel: window.QRCode.CorrectLevel.M
-        });
-      }
+      containerEl.textContent = 'QR을 만들 수 없습니다. 참여 주소를 복사해 주세요.';
     };
 
     containerEl.appendChild(img);

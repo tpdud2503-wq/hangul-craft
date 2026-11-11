@@ -13,10 +13,15 @@ const STAGES = [
   { word: '훈민정음', title: '제8장: 훈민정음' }
 ];
 
+const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[char]);
+
 class TeacherDashboard {
   constructor() {
     this.currentStageIdx = 0;
     this.currentWord = STAGES[0].word;
+    this.settingsBusy = false;
 
     this.initDOM();
     this.bindEvents();
@@ -76,8 +81,7 @@ class TeacherDashboard {
       this.modalSettings.classList.add('hidden');
     });
     document.getElementById('btn-t-add-team').addEventListener('click', () => {
-      window.teamManager.addTeam();
-      this.renderSettingsList();
+      this.runSettingsAction(() => window.teamManager.addTeam());
     });
     document.getElementById('btn-t-save-config').addEventListener('click', () => {
       this.saveSettingsFromModal();
@@ -90,10 +94,14 @@ class TeacherDashboard {
     });
 
     // 문제 일괄 시작 (리셋)
-    this.btnStartProblem.addEventListener('click', () => {
-      window.teamManager.resetMatchState(true);
-      window.soundEngine.playJing();
-      this.showToast('새 라운드가 시작되었습니다! 모든 학생 기기의 타이머가 시작됩니다.');
+    this.btnStartProblem.addEventListener('click', async () => {
+      try {
+        await window.teamManager.resetMatchState(true);
+        window.soundEngine.playJing();
+        this.showToast('새 라운드가 시작되었습니다! 모든 학생 기기에 반영됩니다.');
+      } catch (_) {
+        // 저장 오류는 팀 매니저가 안내한다.
+      }
     });
 
     // 심층 해설 슬라이드 열기
@@ -121,28 +129,27 @@ class TeacherDashboard {
   initCloud() {
     if (!window.cloudSync) return;
 
-    const roomId = window.cloudSync.roomId;
-    const joinUrl = window.cloudSync.getJoinUrl();
-
-    this.tRoomCodeEl.textContent = roomId;
-    this.tQrRoomText.textContent = roomId;
-    this.tJoinUrlInput.value = joinUrl;
-
-    // 좌측 QR코드 렌더링 (QrHelper 사용으로 인식률 100%)
-    window.QrHelper.renderQr(this.tQrcodeContainer, joinUrl, 260);
+    const renderJoinInfo = () => {
+      const roomId = window.cloudSync.roomId;
+      const joinUrl = window.cloudSync.getJoinUrl();
+      this.tRoomCodeEl.textContent = roomId;
+      this.tQrRoomText.textContent = roomId;
+      this.tJoinUrlInput.value = joinUrl;
+      const url = new URL(joinUrl);
+      const unusableOnPhones = url.protocol === 'file:' || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+      document.getElementById('t-join-warning').classList.toggle('hidden', !unusableOnPhones);
+      window.QrHelper.renderQr(this.tQrcodeContainer, joinUrl, 260);
+    };
+    renderJoinInfo();
+    window.cloudSync.onJoinUrlChange(renderJoinInfo);
 
     window.cloudSync.onStatusChange((connected, text) => {
       this.tCloudStatusEl.textContent = text;
       this.tCloudStatusEl.className = `cloud-status-dot ${connected ? 'online' : 'offline'}`;
-      if (connected) {
-        // 교사 대시보드 연결 즉시 방 전체에 현재 모둠 설정과 문제 상태 브로드캐스트
-        window.teamManager.broadcast('ROOM_STATE_SYNC', {
-          teams: window.teamManager.teams,
-          stageIdx: this.currentStageIdx,
-          matchStartTime: window.teamManager.matchStartTime,
-          isMatchActive: window.teamManager.isMatchActive
-        });
-      }
+      this.btnStartProblem.disabled = !connected;
+      this.tStageSelect.disabled = !connected;
+      document.getElementById('btn-t-settings').disabled = !connected;
+      this.setSettingsControlsDisabled(!connected || this.settingsBusy);
     });
   }
 
@@ -157,13 +164,23 @@ class TeacherDashboard {
     this.tStageSelect.value = this.currentStageIdx;
   }
 
-  setStage(idx) {
+  applyRoomStage(idx) {
+    if (!STAGES[idx]) return;
     this.currentStageIdx = idx;
     this.currentWord = STAGES[idx].word;
     this.tStageSelect.value = idx;
-    window.teamManager.broadcast('STAGE_CHANGE', { stageIdx: idx });
-    window.teamManager.resetMatchState(false);
-    this.renderTeamsLive();
+  }
+
+  async setStage(idx) {
+    if (!STAGES[idx]) return;
+    this.tStageSelect.disabled = true;
+    try {
+      await window.teamManager.broadcast('STAGE_CHANGE', { stageIdx: idx });
+    } catch (_) {
+      this.tStageSelect.value = this.currentStageIdx;
+    } finally {
+      this.tStageSelect.disabled = !window.cloudSync.isConnected;
+    }
   }
 
   // 실시간 전광판 렌더링
@@ -178,11 +195,12 @@ class TeacherDashboard {
       const totalCount = team.members.length;
       const percent = totalCount > 0 ? (doneCount / totalCount) * 100 : 0;
 
+      const rank = Number.isInteger(Number(team.rank)) && Number(team.rank) > 0 ? Number(team.rank) : null;
       let rankBadgeHtml = '';
-      if (team.rank) {
+      if (rank) {
         const medalIcons = ['🥇 1등', '🥈 2등', '🥉 3등'];
-        const icon = medalIcons[team.rank - 1] || `${team.rank}등`;
-        rankBadgeHtml = `<span class="dash-rank-badge rank-${team.rank}">${icon} (${team.completedTime}초 완주)</span>`;
+        const icon = medalIcons[rank - 1] || `${rank}등`;
+        rankBadgeHtml = `<span class="dash-rank-badge rank-${rank}">${icon} (${escapeHtml(team.completedTime)}초 완주)</span>`;
       } else {
         rankBadgeHtml = `<span class="dash-rank-badge ongoing">도전 중...</span>`;
       }
@@ -190,12 +208,12 @@ class TeacherDashboard {
       card.innerHTML = `
         <div class="dash-team-header">
           <div class="team-name-group">
-            <span class="dash-team-name">${team.name}</span>
+            <span class="dash-team-name">${escapeHtml(team.name)}</span>
             <span class="team-member-badge">정원: ${totalCount}명</span>
           </div>
           ${rankBadgeHtml}
         </div>
-        <div class="dash-team-score">누적 점수: <strong>${team.score}점</strong></div>
+        <div class="dash-team-score">누적 점수: <strong>${escapeHtml(team.score)}점</strong></div>
         <div class="dash-progress-track">
           <div class="dash-progress-fill" style="width: ${percent}%;"></div>
         </div>
@@ -206,8 +224,8 @@ class TeacherDashboard {
         <div class="dash-members-chips">
           ${team.members.map(m => `
             <div class="dash-member-chip ${m.completed ? 'chip-done' : 'chip-waiting'}">
-              <span>${m.name}</span>
-              <span>${m.completed ? `✓ (${m.completedTime}초)` : '풀이중'}</span>
+              <span>${escapeHtml(m.name)}</span>
+              <span>${m.completed ? `✓ (${escapeHtml(m.completedTime)}초)` : '풀이중'}</span>
             </div>
           `).join('')}
         </div>
@@ -231,7 +249,7 @@ class TeacherDashboard {
       row.className = 't-team-cfg-item';
 
       row.innerHTML = `
-        <input type="text" class="t-team-cfg-name" value="${team.name}" data-team-id="${team.id}">
+        <input type="text" class="t-team-cfg-name" value="${escapeHtml(team.name)}" maxlength="40" data-team-id="${escapeHtml(team.id)}">
         <div class="t-member-count-controls">
           <button class="count-adjust-btn btn-minus" data-team-id="${team.id}">-</button>
           <span class="count-display">${team.members.length}명</span>
@@ -241,19 +259,16 @@ class TeacherDashboard {
       `;
 
       row.querySelector('.btn-minus').addEventListener('click', () => {
-        window.teamManager.setTeamMemberCount(team.id, team.members.length - 1);
-        this.renderSettingsList();
+        this.runSettingsAction(() => window.teamManager.setTeamMemberCount(team.id, team.members.length - 1));
       });
 
       row.querySelector('.btn-plus').addEventListener('click', () => {
-        window.teamManager.setTeamMemberCount(team.id, team.members.length + 1);
-        this.renderSettingsList();
+        this.runSettingsAction(() => window.teamManager.setTeamMemberCount(team.id, team.members.length + 1));
       });
 
       row.querySelector('.t-del-team-btn').addEventListener('click', () => {
         if (confirm(`'${team.name}'을(를) 삭제하시겠습니까?`)) {
-          window.teamManager.removeTeam(team.id);
-          this.renderSettingsList();
+          this.runSettingsAction(() => window.teamManager.removeTeam(team.id));
         }
       });
 
@@ -265,17 +280,38 @@ class TeacherDashboard {
     });
   }
 
-  saveSettingsFromModal() {
-    window.teamManager.applyTeamsConfig(window.teamManager.teams, true);
-    window.teamManager.broadcast('ROOM_STATE_SYNC', {
-      teams: window.teamManager.teams,
-      stageIdx: this.currentStageIdx,
-      matchStartTime: window.teamManager.matchStartTime,
-      isMatchActive: window.teamManager.isMatchActive
+  setSettingsControlsDisabled(disabled) {
+    this.modalSettings.querySelectorAll('button, input').forEach(control => {
+      if (control.id !== 'btn-t-close-settings') control.disabled = disabled;
     });
-    this.modalSettings.classList.add('hidden');
-    this.renderTeamsLive();
-    this.showToast('모둠 구성 및 인원수가 저장되고 학생들에게 즉시 동기화되었습니다!');
+  }
+
+  async runSettingsAction(action) {
+    if (this.settingsBusy || !window.cloudSync.isConnected) return false;
+    this.settingsBusy = true;
+    try {
+      const task = action();
+      this.renderSettingsList();
+      this.setSettingsControlsDisabled(true);
+      await task;
+      return true;
+    } catch (_) {
+      await window.cloudSync.refreshIfConnected();
+      return false;
+    } finally {
+      this.settingsBusy = false;
+      this.renderSettingsList();
+      this.setSettingsControlsDisabled(!window.cloudSync.isConnected);
+    }
+  }
+
+  async saveSettingsFromModal() {
+    const saved = await this.runSettingsAction(() => window.teamManager.applyTeamsConfig(window.teamManager.teams, true));
+    if (saved) {
+      this.modalSettings.classList.add('hidden');
+      this.renderTeamsLive();
+      this.showToast('모둠 구성이 저장되고 학생들에게 동기화되었습니다!');
+    }
   }
 
   showBigQrModal() {
@@ -310,7 +346,7 @@ class TeacherDashboard {
 
       item.innerHTML = `
         <div class="rank-pos">${title}</div>
-        <div class="rank-team-name">${team.name} (${team.members.length}명)</div>
+        <div class="rank-team-name">${escapeHtml(team.name)} (${team.members.length}명)</div>
         <div class="rank-meta">소요시간: ${timeStr}</div>
         <div class="rank-score">+${team.rank ? [100, 80, 60, 40, 20, 10][team.rank - 1] || 10 : 0}점</div>
       `;
@@ -394,4 +430,5 @@ class TeacherDashboard {
 
 window.addEventListener('DOMContentLoaded', () => {
   window.teacherDashboard = new TeacherDashboard();
+  if (window.cloudSync) window.cloudSync.start('teacher');
 });

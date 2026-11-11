@@ -15,6 +15,8 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
       background: #ffffff;
       border: 1.5px solid var(--border-ink);
       border-radius: 10px;
@@ -36,6 +38,11 @@
       border-radius: 6px;
       border: 1px solid var(--border-light);
     }
+    .student-room-info { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .student-room-form { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; padding: 16px; background: #fff; border: 1px solid var(--border-ink); border-radius: 10px; }
+    .student-room-form input { max-width: 12em; padding: 8px; text-transform: uppercase; }
+    .student-room-form button { padding: 8px 14px; cursor: pointer; }
+    .student-room-form.hidden { display: none; }
   </style>
 </head>
 <body>
@@ -46,10 +53,17 @@
         <span class="seal-mark" style="width: 32px; height: 32px; font-size: 0.7rem; border-width: 2px;">訓民</span>
         <span>집현전 한글 공방</span>
       </div>
-      <div class="student-room-chip">
-        방: <strong id="student-room-display">------</strong>
+      <div class="student-room-info">
+        <div class="student-room-chip">방: <strong id="student-room-display">------</strong></div>
+        <span id="student-cloud-status" class="cloud-status-dot" role="status">연결 중...</span>
       </div>
     </header>
+
+    <form id="student-room-form" class="student-room-form hidden">
+      <label for="student-room-input">선생님이 알려 준 방 코드:</label>
+      <input id="student-room-input" type="text" minlength="5" maxlength="8" pattern="[A-Za-z0-9]{5,8}" autocomplete="off" required>
+      <button type="submit" class="royal-btn">방 입장</button>
+    </form>
 
     <!-- 내 모둠 & 학생 선택 바 -->
     <section class="team-bar">
@@ -311,6 +325,7 @@
   </div>
 
   <!-- 스크립트 연결 -->
+  <script src="room-state.js"></script>
   <script src="cloud-sync.js"></script>
   <script src="hangul-engine.js"></script>
   <script src="sound-engine.js"></script>

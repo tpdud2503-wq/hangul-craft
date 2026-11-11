@@ -55,6 +55,8 @@
             <input type="text" id="t-join-url-input" readonly>
             <button id="btn-t-copy-url">주소 복사</button>
           </div>
+          <p id="t-join-warning" class="t-qr-desc hidden">휴대전화에서 접속하려면 교사도 교실 Wi-Fi 주소나 배포된 웹 주소로 사이트를 열어 주세요.</p>
+          <p class="t-qr-desc">로그인 없는 공개 수업방입니다. 개인정보를 입력하지 마세요.</p>
         </div>
       </aside>
 
@@ -96,7 +98,8 @@
       <div class="settings-body">
         <p class="settings-guide">
           각 모둠별로 학생 수가 달라도 괜찮습니다! 모둠마다 학생 수를 자유롭게 설정하세요.<br>
-          (해당 모둠의 학생 전원이 완성해야 최종 완주로 인정됩니다.)
+          (해당 모둠의 학생 전원이 완성해야 최종 완주로 인정됩니다.)<br>
+          진행 중 모둠 구성이나 인원수를 바꾸면 현재 문제가 다시 시작됩니다.
         </p>
 
         <!-- 모둠별 개별 인원수 리스트 -->
@@ -170,6 +173,7 @@
   <!-- 스크립트 연결 -->
   <script src="qrcode.min.js"></script>
   <script src="qr-helper.js"></script>
+  <script src="room-state.js"></script>
   <script src="cloud-sync.js"></script>
   <script src="hangul-engine.js"></script>
   <script src="sound-engine.js"></script>
