@@ -114,7 +114,7 @@ test('join links keep the room code and specify the current release', () => {
   const sync = createClient({ conflicts: 0, room: makeRoom() });
   const url = new URL(sync.getJoinUrl());
   assert.equal(url.searchParams.get('room'), 'ABC234');
-  assert.equal(url.searchParams.get('v'), '20261113-3');
+  assert.equal(url.searchParams.get('v'), '20261113-4');
 });
 
 test('server clock uses monotonic time instead of the device wall clock', async () => {
@@ -177,7 +177,7 @@ test('starting the first practice preserves work done while waiting', () => {
   manager.matchStartTime = null;
   let loads = 0;
   sync.testWindow.game = {
-    currentStageIdx: 0, currentMissionId: 'practice', currentWord: '가',
+    currentStageIdx: 0, currentMissionId: 'practice', currentWord: '가방',
     loadStage() { loads++; }, updateTeamStatus() {}
   };
   sync.hasRoomState = true;
@@ -195,4 +195,23 @@ test('starting the first practice preserves work done while waiting', () => {
   restarted.updated_at = '2026-01-01T00:00:02.000Z';
   sync.applyRoom(restarted);
   assert.equal(loads, 1);
+});
+
+test('opening a saved room restores its roster, missions and scores instead of new defaults', () => {
+  const saved = makeRoom();
+  saved.lesson_state = RoomState.createLessonState(saved.teams);
+  saved.lesson_state.missions[0].word = '가';
+  saved.lesson_state.missions[1].word = '학교';
+  saved.lesson_state.baseScores['1'] = 10;
+  saved.teams[0].score = 10;
+  const before = structuredClone(saved);
+  const sync = createClient({ conflicts: 0, room: saved });
+  const manager = sync.testWindow.teamManager;
+  manager.teams = Array.from({ length: 6 }, (_, index) => makeTeam(index + 1));
+  manager.lessonState = RoomState.createLessonState(manager.teams);
+  sync.applyRoom(saved);
+
+  assert.deepEqual(manager.teams, before.teams);
+  assert.deepEqual(manager.lessonState, before.lesson_state);
+  assert.deepEqual(saved, before);
 });

@@ -89,14 +89,14 @@ test('malformed room data is rejected before rendering', () => {
 test('practice comes first and never changes the cumulative score', () => {
   const state = room();
   state.lesson_state = createLessonState(state.teams);
-  assert.equal(state.lesson_state.missions[0].word, '가');
+  assert.equal(state.lesson_state.missions[0].word, '가방');
   assert.equal(state.lesson_state.missions[0].isPractice, true);
   const first = applyEvent(state, submit(1, 1)).room;
   const completed = applyEvent(first, submit(1, 2)).room;
   assert.equal(completed.teams[0].rank, 1);
   assert.equal(completed.teams[0].score, 0);
   assert.equal(completed.lesson_state.results.practice['1'].points, 0);
-  const edited = applyEvent(completed, { type: 'UPDATE_MISSION', timestamp: 5000, payload: { missionId: 'practice', expectedWord: '가', word: '나' } }).room;
+  const edited = applyEvent(completed, { type: 'UPDATE_MISSION', timestamp: 5000, payload: { missionId: 'practice', expectedWord: '가방', word: '나' } }).room;
   assert.equal(edited.lesson_state.missions[0].word, '나');
   assert.equal(edited.teams[0].score, 0);
   assert.equal(edited.teams[0].isAllCompleted, false);
@@ -253,6 +253,7 @@ test('practice can be started in a legacy room without losing accumulated scores
   assert.deepEqual(old, before);
   assert.equal(next.lesson_state.legacy, true);
   assert.equal(next.lesson_state.missions[0].isPractice, true);
+  assert.equal(next.lesson_state.missions[0].word, '가방');
   assert.equal(next.lesson_state.missions[3].word, '나무');
   assert.equal(next.stage_idx, 0);
   assert.equal(next.lesson_state.timer.durationMs, ROUND_DURATION_MS);
@@ -276,6 +277,30 @@ test('restarting practice retains scores from completed regular rounds', () => {
   assert.equal(state.lesson_state.results.m1['1'].points, 10);
   assert.equal(state.teams[0].score, 10);
   assert.equal(isValidRoom(state), true);
+});
+
+test('existing rooms retain their saved practice word, roster, missions and scores', () => {
+  const old = room();
+  old.teams = [team(1, 3), team(2, 2)];
+  old.stage_idx = 1;
+  old.teams[0].score = 15;
+  old.lesson_state = createLessonState(old.teams);
+  old.lesson_state.missions[0].word = '가';
+  old.lesson_state.missions[1].word = '학교';
+  old.lesson_state.baseScores['1'] = 5;
+  old.lesson_state.results.m1 = { 1: { rank: 1, points: 10, time: 2 } };
+  const before = structuredClone(old);
+  assert.equal(isValidRoom(old), true);
+  assert.deepEqual(getLessonState(old), before.lesson_state);
+
+  const next = applyEvent(old, { type: 'START_PRACTICE', timestamp: 5000, payload: {} }).room;
+  assert.deepEqual(old, before);
+  assert.equal(next.lesson_state.missions[0].word, '가');
+  assert.equal(next.lesson_state.missions[1].word, '학교');
+  assert.deepEqual(next.teams.map(item => item.members.length), [3, 2]);
+  assert.deepEqual(next.teams.map(item => item.score), [15, 0]);
+  assert.equal(next.lesson_state.results.m1['1'].points, 10);
+  assert.equal(isValidRoom(next), true);
 });
 
 test('returning to practice keeps scores in a current-format room', () => {

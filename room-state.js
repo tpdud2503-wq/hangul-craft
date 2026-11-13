@@ -1,6 +1,7 @@
 /** 방 상태를 서버의 최신 값에 적용하는 순수 함수. */
 const RoomState = (() => {
   const DEFAULT_WORDS = ['하늘', '바다', '나무', '태양', '꽃', '맑은', '세종대왕', '훈민정음'];
+  const DEFAULT_PRACTICE_WORD = '가방';
   const MAX_MISSIONS = 30;
   const ROUND_DURATION_MS = 3 * 60 * 1000;
 
@@ -27,7 +28,7 @@ const RoomState = (() => {
 
   function createLessonState(teams = [], includePractice = true) {
     const missions = DEFAULT_WORDS.map((word, index) => ({ id: `m${index + 1}`, word, isPractice: false }));
-    if (includePractice) missions.unshift({ id: 'practice', word: '가', isPractice: true });
+    if (includePractice) missions.unshift({ id: 'practice', word: DEFAULT_PRACTICE_WORD, isPractice: true });
     const baseScores = {};
     teams.forEach(team => { baseScores[String(team.id)] = includePractice ? 0 : (Number(team.score) || 0); });
     return { version: 1, legacy: !includePractice, missions, results: {}, baseScores };
@@ -305,7 +306,7 @@ const RoomState = (() => {
           if (lesson.missions.some(mission => mission.id === 'practice')) {
             throw error('INVALID_MISSION', '연습 문제를 추가할 수 없습니다.');
           }
-          lesson.missions.unshift({ id: 'practice', word: '가', isPractice: true });
+          lesson.missions.unshift({ id: 'practice', word: DEFAULT_PRACTICE_WORD, isPractice: true });
           index = 0;
         }
         next.stage_idx = index;

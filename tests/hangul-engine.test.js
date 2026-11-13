@@ -12,6 +12,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'lesson-explanation.j
 test('old ieung composes as the modern final ㅇ', () => {
   assert.equal(window.HangulEngine.ICHE_MAP['ㅇ'], 'ㆁ');
   assert.equal(window.HangulEngine.composeSyllable('ㄱ', 'ㅏ', 'ㆁ'), '강');
+  assert.equal(window.HangulEngine.composeSyllable('ㅂ', 'ㅏ', 'ㆁ'), '방');
   assert.equal(window.HangulEngine.composeSyllable('ㅇ', 'ㅏ', 'ㆁ'), '앙');
   assert.equal(window.HangulEngine.composeSyllable('ㄱ', 'ㅏ', 'ㄴ'), '간');
   assert.match(window.HangulEngine.getFinalConsonantRecipe('ㅇ').steps.join(' '), /이체.*ㆁ/);

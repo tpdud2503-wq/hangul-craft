@@ -2,6 +2,9 @@
  * 모둠 대항전 관리 및 실시간 동기화 엔진 (모둠별 개별 인원수 설정 완벽 지원)
  */
 
+const DEFAULT_TEAM_COUNT = 6;
+const DEFAULT_MEMBER_COUNT = 5;
+
 class TeamManager {
   constructor() {
     this.channel = null;
@@ -135,8 +138,7 @@ class TeamManager {
         console.error(e);
       }
     }
-    // 기본 모둠 4개, 각각 3명씩 초기화
-    this.initDefaultTeams(4, 3);
+    this.initDefaultTeams();
   }
 
   saveSettings() {
@@ -146,7 +148,7 @@ class TeamManager {
     localStorage.setItem(this.settingsKey, JSON.stringify(data));
   }
 
-  initDefaultTeams(teamCount = 4, defaultMemberCount = 3) {
+  initDefaultTeams(teamCount = DEFAULT_TEAM_COUNT, defaultMemberCount = DEFAULT_MEMBER_COUNT) {
     this.teams = [];
     this.rankings = [];
     for (let i = 1; i <= teamCount; i++) {
@@ -233,7 +235,7 @@ class TeamManager {
   /**
    * 모둠 추가
    */
-  addTeam(name = null, memberCount = 3) {
+  addTeam(name = null, memberCount = DEFAULT_MEMBER_COUNT) {
     if (this.teams.length >= 8) return;
     const nextId = Array.from({ length: 8 }, (_, i) => i + 1).find(id => !this.teams.some(team => team.id === id));
     const teamName = name || this.defaultTeamNames[nextId - 1] || `${nextId}모둠`;
