@@ -79,7 +79,7 @@ const LessonExplanations = {
           target: '양',
           cho: { char: 'ㅇ', title: '초성 ㅇ (후음 기본자)', text: '목구멍의 둥근 모양을 본뜬 글자로, 초성에서는 음가가 없는 순수한 시작을 담당합니다.' },
           jung: { char: 'ㅑ', title: '중성 ㅑ (재출자)', text: '초출자 [ㅏ]에 하늘(ㆍ)을 한 번 더 더하여 점이 두 개가 된 재출자로, 이중모음의 풍부한 울림을 줍니다.' },
-          jong: { char: 'ㅇ', title: '종성 ㅇ (후음 받침)', text: '훈민정음 종성부용초성(終聲復用初聲) 원리에 따라 초성의 ㅇ을 받침에 다시 사용하여 깊은 비음 울림소리를 냅니다.' }
+          jong: { char: 'ㆁ', title: '종성 ㆁ (옛이응)', text: '기본자 ㅇ에 이체를 적용해 옛이응 ㆁ을 만들고, 현대 한글에서는 받침 ㅇ으로 표시합니다.' }
         }
       ],
       discussion: '💡 함께 생각해 볼 탐구 질문: "초출자(ㅏ)와 재출자(ㅑ)를 발음할 때 입술과 혀의 움직임은 어떻게 다를까요?"'
@@ -130,7 +130,7 @@ const LessonExplanations = {
           target: '종',
           cho: { char: 'ㅈ', title: '초성 ㅈ (치음 1차 가획자)', text: '기본자 [ㅅ]에 획을 더하여 만든 잇소리입니다.' },
           jung: { char: 'ㅗ', title: '중성 ㅗ (초출자)', text: '하늘(ㆍ)이 땅(ㅡ) 위에 있는 양성 모음입니다.' },
-          jong: { char: 'ㅇ', title: '종성 ㅇ (후음 받침)', text: '풍부하고 웅장한 목구멍 울림소리입니다.' }
+          jong: { char: 'ㆁ', title: '종성 ㆁ (옛이응)', text: 'ㅇ의 이체자인 옛이응 ㆁ을 받침에 쓰고, 현대 한글에서는 ㅇ으로 표시합니다.' }
         },
         {
           target: '대',
@@ -142,7 +142,7 @@ const LessonExplanations = {
           target: '왕',
           cho: { char: 'ㅇ', title: '초성 ㅇ (후음)', text: '목구멍의 모양입니다.' },
           jung: { char: 'ㅘ', title: '중성 ㅘ (양성 모음 결합)', text: '양성 초출자 [ㅗ]와 [ㅏ]가 결합하여 가장 크고 웅장한 이중모음을 형성합니다.' },
-          jong: { char: 'ㅇ', title: '종성 ㅇ (후음 받침)', text: '위엄 있는 울림소리 받침입니다.' }
+          jong: { char: 'ㆁ', title: '종성 ㆁ (옛이응)', text: 'ㅇ의 이체자인 옛이응 ㆁ으로 받침을 만듭니다. 현대 표기는 ㅇ입니다.' }
         }
       ],
       discussion: '💡 함께 생각해 볼 탐구 질문: "‘세종대왕’ 네 글자에 쓰인 모음 중 결합(합성)으로 만들어진 글자들은 무엇일까요?"'
@@ -167,7 +167,7 @@ const LessonExplanations = {
           target: '정',
           cho: { char: 'ㅈ', title: '초성 ㅈ (치음 가획자)', text: 'ㅅ에 획을 더한 바르고 명확한 잇소리입니다.' },
           jung: { char: 'ㅓ', title: '중성 ㅓ (초출 음성모음)', text: '사람(ㅣ) 안쪽에 하늘(ㆍ)이 깃든 내면의 소리입니다.' },
-          jong: { char: 'ㅇ', title: '종성 ㅇ (후음 받침)', text: '바른 소리(정음)의 청아한 울림입니다.' }
+          jong: { char: 'ㆁ', title: '종성 ㆁ (옛이응)', text: '기본자 ㅇ에 이체를 적용한 옛이응 ㆁ을 받침으로 사용합니다.' }
         },
         {
           target: '음',
@@ -194,7 +194,7 @@ const LessonExplanations = {
       if (decomp) {
         const choRecipe = window.HangulEngine.getConsonantRecipe(decomp.cho);
         const jungRecipe = window.HangulEngine.getVowelRecipe(decomp.jung);
-        const jongRecipe = decomp.jong ? window.HangulEngine.getConsonantRecipe(decomp.jong) : null;
+        const jongRecipe = decomp.jong ? window.HangulEngine.getFinalConsonantRecipe(decomp.jong) : null;
 
         points.push({
           target: char,
@@ -209,8 +209,8 @@ const LessonExplanations = {
             text: jungRecipe ? `${jungRecipe.steps.join(' ➔ ')} (${jungRecipe.explanation})` : '모음 원리'
           },
           jong: {
-            char: decomp.jong || '-',
-            title: decomp.jong ? `종성 ${decomp.jong} (받침)` : '종성 없음',
+            char: decomp.jong === 'ㅇ' ? 'ㆁ' : decomp.jong || '-',
+            title: decomp.jong === 'ㅇ' ? '종성 ㆁ (옛이응 → 현대 ㅇ)' : decomp.jong ? `종성 ${decomp.jong} (받침)` : '종성 없음',
             text: jongRecipe ? `${jongRecipe.steps.join(' ➔ ')} (${jongRecipe.explanation})` : '초성과 중성으로 완성'
           }
         });

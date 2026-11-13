@@ -56,6 +56,9 @@ class StudentGame {
     this.bindEvents();
     this.initCloud();
     this.loadStage(0, false);
+    this.lastClockStatus = null;
+    this.renderRoundTimer();
+    this.timerInterval = window.setInterval(() => this.renderRoundTimer(), 250);
   }
 
   initDOM() {
@@ -72,6 +75,9 @@ class StudentGame {
     this.teamProgressText = document.getElementById('team-progress-text');
 
     this.stageDisplayTitle = document.getElementById('stage-display-title');
+    this.roundTimer = document.getElementById('student-round-timer');
+    this.timerRemaining = document.getElementById('student-timer-remaining');
+    this.timerStatus = document.getElementById('student-timer-status');
     this.stageTitleEl = document.getElementById('stage-title');
     this.stageDescEl = document.getElementById('stage-desc');
     this.wordContainerEl = document.getElementById('target-word-container');
@@ -315,6 +321,8 @@ class StudentGame {
 
     const team = window.teamManager.teams.find(t => t.id === teamId);
     if (!team) return;
+    const clock = window.cloudSync ? window.cloudSync.getRoundClock() : { status: 'legacy' };
+    const expired = clock.status === 'expired';
 
     const myMember = team.members.find(m => m.id === memberId);
     if (myMember && myMember.completed) {
@@ -328,16 +336,17 @@ class StudentGame {
       this.submitStatusMsg.classList.remove('hidden');
     } else {
       this.isSubmitted = false;
-      this.studentStatusBadge.textContent = window.teamManager.isMatchActive ? '풀이 중 ✍️' : '교사 시작 대기';
+      this.studentStatusBadge.textContent = expired ? '시간 종료 ⏰' : window.teamManager.isMatchActive ? '풀이 중 ✍️' : '교사 시작 대기';
       this.studentStatusBadge.className = 'student-status-chip solving';
       const connected = !window.cloudSync || window.cloudSync.isConnected;
-      const ready = this.checkAllCompleted() && window.teamManager.isMatchActive && connected && !this.isSubmitting;
+      const ready = this.checkAllCompleted() && window.teamManager.isMatchActive && connected && !this.isSubmitting && !expired;
       this.btnStudentSubmit.disabled = !ready;
       this.btnStudentSubmit.classList.remove('ready-to-submit', 'submitted');
       this.btnStudentSubmit.classList.toggle('ready-to-submit', ready);
       this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = ready ? '🚀' : '⏳';
       this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = this.isSubmitting
         ? '제출을 저장하는 중입니다...'
+        : expired ? '3분이 지나 제출이 마감되었습니다'
         : !connected ? '실시간 연결을 기다리고 있습니다'
         : !window.teamManager.isMatchActive ? '선생님이 문제를 시작하면 제출할 수 있습니다'
         : ready ? '과제 완성! [제출 및 다음 스텝 준비 완료] 체크하기'
@@ -381,7 +390,7 @@ class StudentGame {
     }
 
     const lesson = window.teamManager.lessonState;
-    if (window.RoomState.isFinalRoundComplete(lesson, window.teamManager.currentStageIdx, window.teamManager.teams)) {
+    if (window.RoomState.isFinalRoundComplete(lesson, window.teamManager.currentStageIdx, window.teamManager.teams, window.teamManager.matchStartTime)) {
       const myStanding = window.RoomState.standings(window.teamManager.teams).find(item => item.team.id === teamId);
       this.finalResultBanner.textContent = `🏆 최종 결과: 우리 모둠 ${myStanding.rank}등 · 총 ${team.score}점`;
       this.finalResultBanner.classList.remove('hidden');
@@ -392,7 +401,7 @@ class StudentGame {
 
   async handleStudentSubmit() {
     if (!this.checkAllCompleted() || this.isSubmitted || this.isSubmitting ||
-        !window.teamManager.isMatchActive || (window.cloudSync && !window.cloudSync.isConnected)) return;
+        !window.teamManager.isMatchActive || (window.cloudSync && (!window.cloudSync.isConnected || window.cloudSync.getRoundClock().status === 'expired'))) return;
 
     const cur = { ...window.teamManager.currentStudent };
     const stage = this.currentStageIdx;
@@ -411,9 +420,26 @@ class StudentGame {
             selected.teamId === cur.teamId && selected.memberId === cur.memberId) this.celebrateWordComplete();
       }, 400);
     } catch (error) {
-      this.showToast(error.code === 'ROUND_CHANGED' ? error.message : '제출을 확인하지 못했습니다. 연결을 확인하고 다시 눌러 주세요.');
+      this.showToast(['ROUND_CHANGED', 'ROUND_EXPIRED'].includes(error.code) ? error.message : '제출을 확인하지 못했습니다. 연결을 확인하고 다시 눌러 주세요.');
     } finally {
       this.isSubmitting = false;
+      this.updateTeamStatus();
+    }
+  }
+
+  renderRoundTimer() {
+    if (!window.cloudSync) return;
+    const clock = window.cloudSync.getRoundClock();
+    this.timerRemaining.textContent = window.RoomState.formatSeconds(clock.remainingSeconds);
+    this.timerStatus.textContent = clock.status === 'running' ? ''
+      : clock.status === 'completed' ? '전원 완주'
+      : clock.status === 'expired' ? '시간 종료 · 제출 마감'
+      : clock.status === 'legacy' ? '이전 문제'
+      : clock.status === 'syncing' ? '시간 확인 중' : '시작 대기';
+    this.roundTimer.classList.toggle('time-warning', clock.status === 'running' && clock.remainingSeconds <= 30);
+    this.roundTimer.classList.toggle('time-expired', clock.status === 'expired');
+    if (this.lastClockStatus !== clock.status) {
+      this.lastClockStatus = clock.status;
       this.updateTeamStatus();
     }
   }
@@ -520,7 +546,7 @@ class StudentGame {
       jongHint.textContent = '(받침 없음)';
       jongHint.className = 'jong-optional';
     } else {
-      jongHint.textContent = `(받침: ${syl.jong})`;
+      jongHint.textContent = syl.jong === 'ㅇ' ? '(받침: 옛이응 ㆁ → 현대 ㅇ)' : `(받침: ${syl.jong})`;
       jongHint.className = 'jong-needed';
     }
 
@@ -724,7 +750,10 @@ class StudentGame {
         window.soundEngine.playMoktak();
       }
     } else if (slotType === 'jong') {
-      if (window.HangulEngine.JONGSUNG.includes(char)) {
+      if (char === 'ㅇ') {
+        this.showToast('받침 ㅇ은 기본자 ㅇ에 [이체]를 눌러 옛이응 ㆁ으로 만들어 주세요.');
+        window.soundEngine.playMoktak();
+      } else if (char === 'ㆁ' || window.HangulEngine.JONGSUNG.includes(char)) {
         syl.completedJong = char;
         window.soundEngine.playGayageum(500);
         this.updateAssembly();
@@ -940,7 +969,7 @@ class StudentGame {
     if (!syl) return;
     const choRecipe = window.HangulEngine.getConsonantRecipe(syl.cho);
     const jungRecipe = window.HangulEngine.getVowelRecipe(syl.jung);
-    const jongRecipe = syl.jong ? window.HangulEngine.getConsonantRecipe(syl.jong) : null;
+    const jongRecipe = syl.jong ? window.HangulEngine.getFinalConsonantRecipe(syl.jong) : null;
 
     let html = `<div class="hint-syllable-title">🎯 목표: <strong>${syl.char}</strong></div>`;
     if (choRecipe) html += `<div class="hint-part"><strong>초성 ${syl.cho}</strong>: ${choRecipe.steps.join(' ➔ ')}</div>`;

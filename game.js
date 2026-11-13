@@ -515,7 +515,7 @@ class HangulCraftGame {
       jongHint.textContent = '(받침 없음)';
       jongHint.className = 'jong-optional';
     } else {
-      jongHint.textContent = `(받침: ${syl.jong})`;
+      jongHint.textContent = syl.jong === 'ㅇ' ? '(받침: 옛이응 ㆁ → 현대 ㅇ)' : `(받침: ${syl.jong})`;
       jongHint.className = 'jong-needed';
     }
 
@@ -774,7 +774,10 @@ class HangulCraftGame {
         window.soundEngine.playMoktak();
       }
     } else if (slotType === 'jong') {
-      if (window.HangulEngine.JONGSUNG.includes(char)) {
+      if (char === 'ㅇ') {
+        this.showNotice('받침 ㅇ은 기본자 ㅇ에 이체를 적용해 옛이응 ㆁ으로 만들어 주세요.', 'error');
+        window.soundEngine.playMoktak();
+      } else if (char === 'ㆁ' || window.HangulEngine.JONGSUNG.includes(char)) {
         syl.completedJong = char;
         this.showNotice(`‘${char}’을 종성(받침) 슬롯에 넣었습니다.`, 'info');
         window.soundEngine.playGayageum(500);
@@ -1032,7 +1035,7 @@ class HangulCraftGame {
 
     const choRecipe = window.HangulEngine.getConsonantRecipe(syl.cho);
     const jungRecipe = window.HangulEngine.getVowelRecipe(syl.jung);
-    const jongRecipe = syl.jong ? window.HangulEngine.getConsonantRecipe(syl.jong) : null;
+    const jongRecipe = syl.jong ? window.HangulEngine.getFinalConsonantRecipe(syl.jong) : null;
 
     let html = `<div class="hint-syllable-title">🎯 목표 음절: <strong>${syl.char}</strong></div>`;
 

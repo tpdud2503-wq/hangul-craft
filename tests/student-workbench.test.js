@@ -10,7 +10,7 @@ function loadStudentGame() {
   const document = { getElementById: () => hint, createElement: element };
   const window = {
     addEventListener() {},
-    soundEngine: { playPyeongyeong() {}, playWordComplete() {} }
+    soundEngine: { playPyeongyeong() {}, playWordComplete() {}, playGayageum() {}, playMoktak() {} }
   };
   const context = vm.createContext({ window, document, console, setTimeout, clearTimeout });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'hangul-engine.js'), 'utf8'), context);
@@ -54,4 +54,23 @@ test('a reserved vowel can be combined with another constructed vowel', () => {
   game.actionHapseong();
   assert.deepEqual(Array.from(game.vowelSlots), ['ㅘ']);
   assert.equal(game.vowelReserve, null);
+});
+
+test('final ㅇ must be made as old ieung while initial ㅇ remains available', () => {
+  const { StudentGame } = loadStudentGame();
+  const game = Object.create(StudentGame.prototype);
+  const syllable = { char: '앙', jong: 'ㅇ', completedCho: '', completedJung: 'ㅏ', completedJong: '' };
+  let notice = '';
+  Object.assign(game, {
+    syllables: [syllable], activeSyllableIdx: 0, consonantSlots: ['ㅇ'], activeConsonantIdx: 0,
+    updateAssembly() {}, showToast(message) { notice = message; }
+  });
+  game.sendConsonant('cho');
+  assert.equal(syllable.completedCho, 'ㅇ');
+  game.sendConsonant('jong');
+  assert.equal(syllable.completedJong, '');
+  assert.match(notice, /이체.*ㆁ/);
+  game.consonantSlots = ['ㆁ'];
+  game.sendConsonant('jong');
+  assert.equal(syllable.completedJong, 'ㆁ');
 });

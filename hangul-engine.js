@@ -55,7 +55,7 @@ const HangulEngine = {
   ICHE_EXPLANATIONS: {
     'ㄹ': '설음(ㄴ)의 이체자로, 혀끝이 굴러가는 소리(반설음)를 나타냄',
     'ㅿ': '치음(ㅅ)의 이체자로, 반치음을 나타냄',
-    'ㆁ': '후음(ㅇ)의 이체자로, 꼭지가 있는 옛이응'
+    'ㆁ': 'ㅇ의 이체자인 옛이응으로, 받침의 울림소리를 나타냄'
   },
 
   // 각자병서 (같은 자음을 나란히 써서 된소리를 만듦)
@@ -146,7 +146,9 @@ const HangulEngine = {
   composeSyllable(cho, jung, jong = '') {
     const choIdx = this.CHOSUNG.indexOf(cho);
     const jungIdx = this.JUNGSUNG.indexOf(jung);
-    const jongIdx = jong ? this.JONGSUNG.indexOf(jong) : 0;
+    // 옛이응으로 만든 받침은 현대 완성형 한글의 종성 ㅇ으로 조합한다.
+    const modernJong = jong === 'ㆁ' ? 'ㅇ' : jong;
+    const jongIdx = modernJong ? this.JONGSUNG.indexOf(modernJong) : 0;
 
     if (choIdx === -1 || jungIdx === -1 || jongIdx === -1) {
       return null;
@@ -224,6 +226,16 @@ const HangulEngine = {
     }
 
     return null;
+  },
+
+  getFinalConsonantRecipe(target) {
+    if (target !== 'ㅇ') return this.getConsonantRecipe(target);
+    const recipe = this.getConsonantRecipe('ㆁ');
+    return {
+      ...recipe,
+      steps: [...recipe.steps, '옛이응 [ㆁ]을 현대 한글 받침 [ㅇ]으로 표시'],
+      explanation: '기본자 [ㅇ]에 이체를 적용한 옛이응 [ㆁ]으로 받침의 울림소리를 만듭니다.'
+    };
   },
 
   /**

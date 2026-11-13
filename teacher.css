@@ -226,6 +226,20 @@
   line-height: 1.4;
 }
 
+.round-timer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--border-ink);
+  border-radius: 8px;
+  background: #f8f9fa;
+  font-size: 0.9rem;
+}
+.round-timer strong { font-family: monospace; font-size: 1.45rem; color: var(--royal-blue); }
+.round-timer.time-warning, .round-timer.time-expired { background: #fff4e6; color: #a64000; }
+
 .prob-select-group {
   display: flex;
   align-items: center;

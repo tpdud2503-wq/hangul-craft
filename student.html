@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261113-1">
+  <link rel="stylesheet" href="style.css?v=20261113-2">
   <style>
     /* 학생 모바일 최적화 스타일 */
     .student-header {
@@ -46,6 +46,8 @@
     .student-room-form.hidden { display: none; }
     .vowel-reserve-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 10px 0; font-size: 0.9rem; }
     .vowel-reserve-row button { padding: 6px 10px; cursor: pointer; }
+    .student-timer { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 0.9rem; font-weight: 700; }
+    .student-timer strong { font-family: monospace; font-size: 1.2rem; }
   </style>
 </head>
 <body>
@@ -99,6 +101,9 @@
       <div class="stage-info-group">
         <span class="stage-label">현재 미션:</span>
         <strong id="stage-display-title" style="font-size: 1.1rem; color: var(--royal-blue);">연습 · 가</strong>
+      </div>
+      <div id="student-round-timer" class="student-timer" role="timer" aria-live="off" aria-label="문제 남은 시간">
+        <span>⏱ 남은 시간</span><strong id="student-timer-remaining">03:00</strong><span id="student-timer-status">시작 대기</span>
       </div>
       <button id="btn-toggle-hint" class="hint-toggle-btn">📜 훈수(힌트)</button>
     </section>
@@ -228,7 +233,7 @@
             </button>
             <button id="btn-iche" class="principle-btn btn-action-iche" disabled>
               <span class="btn-icon">🔀</span>
-              <span class="btn-label">이체 (ㄴ➔ㄹ)</span>
+              <span class="btn-label">이체 (ㄴ➔ㄹ, ㅇ➔ㆁ)</span>
             </button>
             <button id="btn-hapyong" class="principle-btn btn-action-hapyong" disabled>
               <span class="btn-icon">🤝</span>
@@ -246,7 +251,7 @@
           </div>
 
           <div id="c-principle-info" class="principle-info-box">
-            자음 기본자를 선택하여 창제를 시작하세요.
+            받침 ㅇ은 기본자 ㅇ에 이체를 적용해 옛이응 ㆁ으로 만듭니다.
           </div>
         </div>
       </div>
@@ -337,11 +342,11 @@
   </div>
 
   <!-- 스크립트 연결 -->
-  <script src="room-state.js?v=20261113-1"></script>
-  <script src="cloud-sync.js?v=20261113-1"></script>
-  <script src="hangul-engine.js?v=20261113-1"></script>
-  <script src="sound-engine.js?v=20261113-1"></script>
-  <script src="team-manager.js?v=20261113-1"></script>
-  <script src="student.js?v=20261113-1"></script>
+  <script src="room-state.js?v=20261113-2"></script>
+  <script src="cloud-sync.js?v=20261113-2"></script>
+  <script src="hangul-engine.js?v=20261113-2"></script>
+  <script src="sound-engine.js?v=20261113-2"></script>
+  <script src="team-manager.js?v=20261113-2"></script>
+  <script src="student.js?v=20261113-2"></script>
 </body>
 </html>

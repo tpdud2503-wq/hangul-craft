@@ -5,7 +5,7 @@ const SUPABASE_CONFIG = {
   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5cm5nbWFrcnZjeW51YWh4b2JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNzU2NzUsImV4cCI6MjEwOTk1MTY3NX0.1rwLrDh4fkyTfW9aiDkxkiicw0NRrsdHqK-23aMYUaE'
 };
 // HTML의 정적 파일 버전과 함께 갱신해 오래된 화면·스크립트 혼용을 방지한다.
-const APP_VERSION = '20261113-1';
+const APP_VERSION = '20261113-2';
 
 class CloudSync {
   constructor() {
@@ -30,6 +30,13 @@ class CloudSync {
     this.writeQueue = Promise.resolve();
     this.refreshPromise = null;
     this.openPromise = null;
+    this.clockServerAtAnchor = null;
+    this.clockMonotonicAnchor = null;
+    this.clockSyncedAt = null;
+    this.clockSyncPromise = null;
+    this.expiryTimer = null;
+    this.expiryKey = null;
+    this.expiryPending = false;
   }
 
   getOrCreateRoomId() {
@@ -113,14 +120,24 @@ class CloudSync {
       this.subscribe();
       // 방 생성은 WebSocket 구독과 독립적으로 진행한다.
       this.ensureRoom().catch(error => this.handleRoomError(error));
-      window.addEventListener('online', () => this.refreshIfConnected());
+      this.syncClock().catch(error => this.handleClockError(error));
+      window.addEventListener('online', () => {
+        this.syncClock().catch(error => this.handleClockError(error));
+        this.refreshIfConnected();
+      });
       document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) this.refreshIfConnected();
+        if (!document.hidden) {
+          this.syncClock().catch(error => this.handleClockError(error));
+          this.refreshIfConnected();
+        }
       });
       // WebSocket이 차단되면 3초마다, 정상 연결 중에는 15초마다 상태를 확인한다.
       let ticks = 0;
       this.pollTimer = window.setInterval(() => {
         ticks++;
+        if (this.clockServerAtAnchor == null || this.monotonicNow() - this.clockSyncedAt >= 60000) {
+          this.syncClock().catch(error => this.handleClockError(error));
+        }
         if (this.pollingMode || ticks % 5 === 0) this.refreshIfConnected();
       }, 3000);
     } catch (err) {
@@ -159,7 +176,7 @@ class CloudSync {
           if (err) console.warn('Supabase Realtime:', status, err);
           this.realtimeReady = false;
           this.pollingMode = true;
-          if (this.roomAvailable) this.notifyStatus(true, '자동 동기화 중 (약 3초 간격)');
+          if (this.roomAvailable) this.updateConnectionStatus();
           else this.notifyStatus(false, '실시간 연결이 차단되어 방을 확인 중입니다');
           this.refreshIfConnected();
         }
@@ -174,8 +191,48 @@ class CloudSync {
       : '방 연결 오류: 인터넷 상태를 확인해 주세요');
   }
 
+  monotonicNow() {
+    return window.performance && typeof window.performance.now === 'function' ? window.performance.now() : Date.now();
+  }
+
+  serverNow() {
+    if (this.clockServerAtAnchor == null) return null;
+    return Math.floor(this.clockServerAtAnchor + this.monotonicNow() - this.clockMonotonicAnchor);
+  }
+
+  syncClock() {
+    if (this.clockSyncPromise) return this.clockSyncPromise;
+    const started = this.monotonicNow();
+    this.clockSyncPromise = (async () => {
+      const { data, error } = await this.supabase.rpc('hangul_clock_ms');
+      if (error) throw error;
+      const received = this.monotonicNow();
+      const serverTime = Number(data);
+      if (!Number.isSafeInteger(serverTime) || serverTime <= 0) throw new Error('서버 시각이 올바르지 않습니다.');
+      this.clockServerAtAnchor = serverTime + (received - started) / 2;
+      this.clockMonotonicAnchor = received;
+      this.clockSyncedAt = received;
+      if (this.roomAvailable) this.updateConnectionStatus();
+      this.scheduleRoundExpiry(true);
+    })().finally(() => { this.clockSyncPromise = null; });
+    return this.clockSyncPromise;
+  }
+
+  handleClockError(error) {
+    console.warn('서버 시간 동기화 실패:', error);
+    if (this.clockServerAtAnchor == null) this.notifyStatus(false, '서버 시간 연결 실패 (재시도 중)');
+  }
+
+  updateConnectionStatus() {
+    if (this.clockServerAtAnchor == null) this.notifyStatus(false, '서버 시간 동기화 중');
+    else if (this.realtimeReady) this.notifyStatus(true, 'Supabase 실시간 연결됨 🟢');
+    else if (this.pollingMode) this.notifyStatus(true, '자동 동기화 중 (약 3초 간격)');
+    else this.notifyStatus(false, '방을 확인했습니다. 실시간 연결 중입니다');
+  }
+
   notifyRoomMissing() {
     this.roomAvailable = false;
+    this.scheduleRoundExpiry();
     this.waitingForRoom = this.role === 'student';
     this.notifyStatus(false, this.waitingForRoom
       ? '교사 방을 찾을 수 없습니다. 교사의 연결 상태와 방 코드를 확인해 주세요'
@@ -201,8 +258,8 @@ class CloudSync {
     const initial = {
       room_id: this.roomId,
       stage_idx: 0,
-      is_match_active: true,
-      match_start_time: Date.now(),
+      is_match_active: false,
+      match_start_time: null,
       teams: initialTeams,
       lesson_state: window.RoomState.createLessonState(initialTeams),
       updated_at: new Date().toISOString()
@@ -309,13 +366,71 @@ class CloudSync {
     this.hasRoomState = true;
     this.roomAvailable = true;
     this.waitingForRoom = false;
-    if (this.realtimeReady) this.notifyStatus(true, 'Supabase 실시간 연결됨 🟢');
-    else if (this.pollingMode) this.notifyStatus(true, '자동 동기화 중 (약 3초 간격)');
-    else this.notifyStatus(false, '방을 확인했습니다. 실시간 연결 중입니다');
+    this.updateConnectionStatus();
+    this.scheduleRoundExpiry();
+  }
+
+  getRoundClock() {
+    const manager = window.teamManager;
+    return window.RoomState.getRoundClock(manager.lessonState, manager.matchStartTime, manager.isMatchActive, this.serverNow());
+  }
+
+  scheduleRoundExpiry(force = false) {
+    const manager = window.teamManager;
+    const timer = manager && manager.lessonState && manager.lessonState.timer;
+    const active = this.roomAvailable && this.clockServerAtAnchor != null && manager.isMatchActive &&
+      timer && timer.startedAt === manager.matchStartTime && timer.reason == null;
+    if (!active) {
+      if (this.expiryTimer != null) window.clearTimeout(this.expiryTimer);
+      this.expiryTimer = null;
+      this.expiryKey = null;
+      return;
+    }
+    const stage = manager.currentStageIdx;
+    const start = timer.startedAt;
+    const key = `${stage}:${start}`;
+    if (this.expiryPending && this.expiryKey === key) return;
+    if (!force && this.expiryKey === key && this.expiryTimer != null) return;
+    if (this.expiryTimer != null) window.clearTimeout(this.expiryTimer);
+    const delay = Math.min(2147483647, Math.max(0, start + timer.durationMs - this.serverNow()));
+    this.expiryKey = key;
+    this.expiryTimer = window.setTimeout(() => {
+      this.expiryTimer = null;
+      this.expireRound(key, stage, start);
+    }, delay);
+  }
+
+  async expireRound(key, stage, start) {
+    if (this.expiryPending || this.expiryKey !== key) return;
+    if (!this.isConnected) {
+      this.expiryTimer = window.setTimeout(() => this.expireRound(key, stage, start), 3000);
+      return;
+    }
+    this.expiryPending = true;
+    try {
+      await this.publish({ type: 'EXPIRE_MATCH', payload: { stageIdx: stage, roundStartTime: start } });
+    } catch (error) {
+      if (error.code === 'ROUND_NOT_EXPIRED') {
+        await this.syncClock().catch(clockError => this.handleClockError(clockError));
+      } else {
+        console.warn('시간 종료 동기화 재시도:', error);
+      }
+    } finally {
+      this.expiryPending = false;
+      const manager = window.teamManager;
+      const timer = manager.lessonState && manager.lessonState.timer;
+      if (this.expiryKey === key && manager.isMatchActive && timer && timer.startedAt === start && timer.reason == null) {
+        const delay = Math.min(2147483647, Math.max(1000, start + timer.durationMs - this.serverNow()));
+        this.expiryTimer = window.setTimeout(() => {
+          this.expiryTimer = null;
+          this.expireRound(key, stage, start);
+        }, delay);
+      }
+    }
   }
 
   publish(data) {
-    if (!this.isConnected || !this.supabase) {
+    if (!this.isConnected || !this.supabase || this.clockServerAtAnchor == null) {
       return Promise.reject(new Error('실시간 연결이 준비되지 않았습니다.'));
     }
     const event = JSON.parse(JSON.stringify(data));
@@ -329,14 +444,16 @@ class CloudSync {
     for (let attempt = 0; attempt < 40; attempt++) {
       const current = await this.fetchRoom();
       if (!current) throw new Error('교사의 방을 찾을 수 없습니다.');
-      const result = window.RoomState.applyEvent(current, event);
+      const timestamp = this.serverNow();
+      if (timestamp == null) throw new Error('서버 시간을 확인하지 못했습니다.');
+      const result = window.RoomState.applyEvent(current, { ...event, timestamp });
       if (!result.changed) {
         this.applyRoom(current);
         return current;
       }
 
       const previousMs = current.updated_at ? Date.parse(current.updated_at) : 0;
-      const nextMs = Math.max(Date.now(), (Number.isFinite(previousMs) ? previousMs : 0) + 1);
+      const nextMs = Math.max(timestamp, (Number.isFinite(previousMs) ? previousMs : 0) + 1);
       const next = result.room;
       const changes = {
         stage_idx: next.stage_idx,
@@ -349,7 +466,14 @@ class CloudSync {
       let query = this.supabase.from('game_rooms').update(changes).eq('room_id', this.roomId);
       query = current.updated_at == null ? query.is('updated_at', null) : query.eq('updated_at', current.updated_at);
       const { data, error } = await query.select('*').maybeSingle();
-      if (error) throw error;
+      if (error) {
+        if (error.message === 'ROUND_TIME_EXPIRED' || error.message === 'ROUND_NOT_EXPIRED') {
+          const mapped = new Error(error.message === 'ROUND_TIME_EXPIRED' ? '3분이 지나 제출이 마감되었습니다.' : '아직 제한 시간이 남았습니다.');
+          mapped.code = error.message === 'ROUND_TIME_EXPIRED' ? 'ROUND_EXPIRED' : 'ROUND_NOT_EXPIRED';
+          throw mapped;
+        }
+        throw error;
+      }
       if (data) {
         this.applyRoom(data);
         if (this.channel && this.realtimeReady) {

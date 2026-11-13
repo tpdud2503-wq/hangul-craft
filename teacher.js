@@ -20,6 +20,8 @@ class TeacherDashboard {
     this.initCloud();
     this.renderStageSelect();
     this.renderTeamsLive();
+    this.renderRoundTimer();
+    this.timerInterval = window.setInterval(() => this.renderRoundTimer(), 250);
   }
 
   initDOM() {
@@ -33,6 +35,9 @@ class TeacherDashboard {
     this.tRoomGuide = document.getElementById('t-room-guide');
 
     this.tStageSelect = document.getElementById('t-stage-select');
+    this.roundTimer = document.getElementById('t-round-timer');
+    this.timerElapsed = document.getElementById('t-timer-elapsed');
+    this.timerStatus = document.getElementById('t-timer-status');
     this.btnStartProblem = document.getElementById('btn-t-start-problem');
     this.btnOpenExplanation = document.getElementById('btn-t-open-explanation');
     this.teamsLiveGrid = document.getElementById('t-teams-live-grid');
@@ -105,7 +110,7 @@ class TeacherDashboard {
 
     // 문제 일괄 시작 (리셋)
     this.btnStartProblem.addEventListener('click', async () => {
-      const hasProgress = window.teamManager.isMatchActive && window.teamManager.teams.some(team => team.members.some(member => member.completed));
+      const hasProgress = window.teamManager.teams.some(team => team.members.some(member => member.completed));
       if (hasProgress && !confirm('이 문제를 다시 시작하면 현재 라운드의 제출과 점수가 초기화됩니다. 계속하시겠습니까?')) return;
       try {
         await window.teamManager.resetMatchState(true);
@@ -178,13 +183,29 @@ class TeacherDashboard {
 
   updateRoomGuide(connected) {
     const mission = window.teamManager.lessonState.missions[window.teamManager.currentStageIdx];
+    const timer = window.teamManager.lessonState.timer;
+    const expired = timer && timer.startedAt === window.teamManager.matchStartTime && timer.reason === 'timeout';
     this.tRoomGuide.textContent = !connected
       ? '교사 방은 자동으로 열립니다. 연결이 완료되면 학생에게 QR을 보여 주세요.'
+      : expired ? '3분이 종료되었습니다. 점수를 확인하고 다음 문제를 선택하세요.'
       : window.cloudSync.realtimeReady
         ? mission && mission.isPractice
-          ? '연습 문제가 자동으로 시작됩니다. 학생에게 QR을 보여 주고, 준비되면 1라운드를 선택하세요.'
+          ? '학생이 입장하면 문제 시작을 눌러 3분 연습을 시작하세요.'
           : '교사 방이 열렸습니다. 학생이 QR로 입장한 뒤 문제를 진행해 주세요.'
         : '교사 방이 열렸습니다. 실시간 연결이 차단되어 약 3초 간격으로 동기화합니다.';
+  }
+
+  renderRoundTimer() {
+    if (!window.cloudSync) return;
+    const clock = window.cloudSync.getRoundClock();
+    this.timerElapsed.textContent = window.RoomState.formatSeconds(clock.elapsedSeconds);
+    this.timerStatus.textContent = clock.status === 'running' ? `남은 ${window.RoomState.formatSeconds(clock.remainingSeconds)}`
+      : clock.status === 'completed' ? '전원 완주'
+      : clock.status === 'expired' ? '시간 종료 · 제출 마감'
+      : clock.status === 'legacy' ? '이전 문제 · 다시 시작하면 3분 적용'
+      : clock.status === 'syncing' ? '시간 동기화 중' : '문제 시작 대기';
+    this.roundTimer.classList.toggle('time-warning', clock.status === 'running' && clock.remainingSeconds <= 30);
+    this.roundTimer.classList.toggle('time-expired', clock.status === 'expired');
   }
 
   renderStageSelect() {
@@ -212,7 +233,7 @@ class TeacherDashboard {
     this.updateRoomGuide(window.cloudSync.isConnected);
     document.getElementById('btn-expl-next-stage').textContent = idx === lesson.missions.length - 1 ? '최종 점수 보기 ➔' : '다음 문제로 함께 진행 ➔';
     this.renderTeamsLive();
-    if (window.RoomState.isFinalRoundComplete(lesson, idx, window.teamManager.teams)) {
+    if (window.RoomState.isFinalRoundComplete(lesson, idx, window.teamManager.teams, window.teamManager.matchStartTime)) {
       const key = `${mission.id}:${window.teamManager.matchStartTime}`;
       if (this.lastFinalKey !== key) {
         this.lastFinalKey = key;
@@ -245,6 +266,7 @@ class TeacherDashboard {
     this.teamsLiveGrid.innerHTML = '';
     const lesson = window.teamManager.lessonState;
     const mission = lesson.missions[window.teamManager.currentStageIdx];
+    const expired = window.cloudSync && window.cloudSync.getRoundClock().status === 'expired';
 
     window.teamManager.teams.forEach(team => {
       const card = document.createElement('div');
@@ -265,7 +287,7 @@ class TeacherDashboard {
         const icon = medalIcons[rank - 1] || `${rank}등`;
         rankBadgeHtml = `<span class="dash-rank-badge rank-${rank}">${icon} (${escapeHtml(team.completedTime)}초 완주)</span>`;
       } else {
-        rankBadgeHtml = `<span class="dash-rank-badge ongoing">도전 중...</span>`;
+        rankBadgeHtml = `<span class="dash-rank-badge ongoing">${expired ? '시간 종료 · 미완주' : '도전 중...'}</span>`;
       }
 
       card.innerHTML = `
@@ -478,7 +500,8 @@ class TeacherDashboard {
   renderFinalResults() {
     const lesson = window.teamManager.lessonState;
     const regular = lesson.missions.filter(mission => !mission.isPractice);
-    const hasPoints = window.teamManager.teams.some(team => team.score > 0);
+    const hasPoints = window.teamManager.teams.some(team => team.score > 0) ||
+      window.RoomState.isFinalRoundComplete(lesson, window.teamManager.currentStageIdx, window.teamManager.teams, window.teamManager.matchStartTime);
     document.getElementById('t-final-legacy-note').classList.toggle('hidden', !lesson.legacy);
     this.finalResultsList.innerHTML = '';
     window.RoomState.standings(window.teamManager.teams).forEach(({ team, rank }) => {
@@ -494,7 +517,10 @@ class TeacherDashboard {
       rounds.className = 'result-rounds';
       rounds.textContent = regular.map((mission, index) => {
         const result = lesson.results[mission.id] && lesson.results[mission.id][String(team.id)];
-        return `${index + 1}R ${mission.word}: ${result ? `${result.points}점` : '—'}`;
+        const current = lesson.missions[window.teamManager.currentStageIdx];
+        const timedOut = current && current.id === mission.id && lesson.timer &&
+          lesson.timer.startedAt === window.teamManager.matchStartTime && lesson.timer.reason === 'timeout';
+        return `${index + 1}R ${mission.word}: ${result ? `${result.points}점` : timedOut ? '0점(미완주)' : '—'}`;
       }).join(' · ');
       row.append(name, score, rounds);
       this.finalResultsList.appendChild(row);

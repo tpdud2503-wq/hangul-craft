@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { applyEvent, isValidRoom, createLessonState, getLessonState, standings, isFinalRoundComplete } = require('../room-state.js');
+const { applyEvent, isValidRoom, createLessonState, getLessonState, standings, isFinalRoundComplete, getRoundClock, formatSeconds, ROUND_DURATION_MS } = require('../room-state.js');
 
 function team(id, count = 2) {
   return {
@@ -186,4 +186,58 @@ test('invalid round scores and mission words are rejected when reading a room', 
   state.lesson_state.results = {};
   state.lesson_state.missions[1].word = '<script>';
   assert.equal(isValidRoom(state), false);
+});
+
+test('starting a round creates a three-minute stopwatch', () => {
+  const next = applyEvent(room(), { type: 'RESET_MATCH', timestamp: 5000, payload: {} }).room;
+  assert.equal(next.lesson_state.timer.startedAt, 5000);
+  assert.equal(next.lesson_state.timer.durationMs, 180000);
+  const running = getRoundClock(next.lesson_state, next.match_start_time, true, 17345);
+  assert.equal(running.status, 'running');
+  assert.equal(formatSeconds(running.elapsedSeconds), '00:12');
+  assert.equal(formatSeconds(running.remainingSeconds), '02:48');
+  const deadline = getRoundClock(next.lesson_state, next.match_start_time, true, 185000);
+  assert.equal(deadline.status, 'expired');
+  assert.equal(formatSeconds(deadline.elapsedSeconds), '03:00');
+  assert.equal(formatSeconds(deadline.remainingSeconds), '00:00');
+});
+
+test('timeout preserves earned scores, rejects late submissions and ignores stale timeouts', () => {
+  let state = applyEvent(room(), { type: 'RESET_MATCH', timestamp: 5000, payload: {} }).room;
+  state = applyEvent(state, submit(1, 1, 6000, 0, 5000)).room;
+  state = applyEvent(state, submit(1, 2, 7000, 0, 5000)).room;
+  assert.equal(state.teams[0].score, 10);
+  const timeout = { type: 'EXPIRE_MATCH', timestamp: 5000 + ROUND_DURATION_MS, payload: { stageIdx: 0, roundStartTime: 5000 } };
+  assert.throws(() => applyEvent(state, { ...timeout, timestamp: timeout.timestamp - 1 }), { code: 'ROUND_NOT_EXPIRED' });
+  assert.equal(applyEvent(state, { ...timeout, payload: { stageIdx: 0, roundStartTime: 1 } }).changed, false);
+  assert.throws(() => applyEvent(state, submit(2, 1, timeout.timestamp, 0, 5000)), { code: 'ROUND_EXPIRED' });
+  state = applyEvent(state, timeout).room;
+  assert.equal(state.is_match_active, false);
+  assert.equal(state.lesson_state.timer.reason, 'timeout');
+  assert.deepEqual(state.teams.map(item => item.score), [10, 0]);
+  assert.equal(applyEvent(state, submit(1, 2, timeout.timestamp + 1, 0, 5000)).changed, false);
+  assert.throws(() => applyEvent(state, submit(2, 1, timeout.timestamp + 1, 0, 5000)), { code: 'ROUND_EXPIRED' });
+});
+
+test('stopwatch freezes when all teams finish before the limit', () => {
+  let state = room();
+  state.teams = [team(1, 1), team(2, 1)];
+  state = applyEvent(state, { type: 'RESET_MATCH', timestamp: 5000, payload: {} }).room;
+  state = applyEvent(state, submit(1, 1, 8000, 0, 5000)).room;
+  state = applyEvent(state, submit(2, 1, 10000, 0, 5000)).room;
+  assert.equal(state.lesson_state.timer.reason, 'completed');
+  const clock = getRoundClock(state.lesson_state, state.match_start_time, true, 999999);
+  assert.equal(clock.status, 'completed');
+  assert.equal(formatSeconds(clock.elapsedSeconds), '00:05');
+  assert.equal(applyEvent(state, { type: 'EXPIRE_MATCH', timestamp: 999999, payload: { stageIdx: 0, roundStartTime: 5000 } }).changed, false);
+});
+
+test('existing untimed rounds remain intact and an expired last round shows final standings', () => {
+  const old = room();
+  assert.equal(getRoundClock(getLessonState(old), old.match_start_time, true, 999999).status, 'legacy');
+  let state = { ...room(), lesson_state: createLessonState(room().teams) };
+  const last = state.lesson_state.missions.length - 1;
+  state = applyEvent(state, { type: 'STAGE_CHANGE', timestamp: 5000, payload: { stageIdx: last } }).room;
+  state = applyEvent(state, { type: 'EXPIRE_MATCH', timestamp: 185000, payload: { stageIdx: last, roundStartTime: 5000 } }).room;
+  assert.equal(isFinalRoundComplete(state.lesson_state, last, state.teams, state.match_start_time), true);
 });

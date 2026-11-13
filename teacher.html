@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261113-1">
-  <link rel="stylesheet" href="teacher.css?v=20261113-1">
+  <link rel="stylesheet" href="style.css?v=20261113-2">
+  <link rel="stylesheet" href="teacher.css?v=20261113-2">
 </head>
 <body class="teacher-dashboard-body">
   <div class="teacher-container">
@@ -70,6 +70,12 @@
           <div class="prob-select-group">
             <label for="t-stage-select">진행 문제:</label>
             <select id="t-stage-select" class="t-select"></select>
+          </div>
+          <div id="t-round-timer" class="round-timer" role="timer" aria-live="off" aria-label="문제 경과 시간">
+            <span>⏱ 경과</span>
+            <strong id="t-timer-elapsed">00:00</strong>
+            <span>/ 03:00</span>
+            <span id="t-timer-status">문제 시작 대기</span>
           </div>
           
           <div class="t-btn-group">
@@ -210,14 +216,14 @@
   </div>
 
   <!-- 스크립트 연결 -->
-  <script src="qrcode.min.js?v=20261113-1"></script>
-  <script src="qr-helper.js?v=20261113-1"></script>
-  <script src="room-state.js?v=20261113-1"></script>
-  <script src="cloud-sync.js?v=20261113-1"></script>
-  <script src="hangul-engine.js?v=20261113-1"></script>
-  <script src="sound-engine.js?v=20261113-1"></script>
-  <script src="team-manager.js?v=20261113-1"></script>
-  <script src="lesson-explanation.js?v=20261113-1"></script>
-  <script src="teacher.js?v=20261113-1"></script>
+  <script src="qrcode.min.js?v=20261113-2"></script>
+  <script src="qr-helper.js?v=20261113-2"></script>
+  <script src="room-state.js?v=20261113-2"></script>
+  <script src="cloud-sync.js?v=20261113-2"></script>
+  <script src="hangul-engine.js?v=20261113-2"></script>
+  <script src="sound-engine.js?v=20261113-2"></script>
+  <script src="team-manager.js?v=20261113-2"></script>
+  <script src="lesson-explanation.js?v=20261113-2"></script>
+  <script src="teacher.js?v=20261113-2"></script>
 </body>
 </html>

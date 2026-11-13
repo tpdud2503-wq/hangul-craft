@@ -37,6 +37,7 @@ function fakeClient(store) {
             if (this.operation === 'update') store.conflicts++;
             return { data: null, error: null };
           }
+          if (this.operation === 'update' && store.updateError) return { data: null, error: store.updateError };
           if (this.operation === 'update') store.room = { ...store.room, ...structuredClone(this.changes) };
           return { data: structuredClone(store.room), error: null };
         }
@@ -47,6 +48,7 @@ function fakeClient(store) {
 }
 
 function createClient(store) {
+  const timers = [];
   const manager = {
     teams: structuredClone(store.room ? store.room.teams : [makeTeam(1), makeTeam(2)]), isMatchActive: true, matchStartTime: 1000,
     applyTeamsConfig(teams) { this.teams = teams; }
@@ -54,7 +56,9 @@ function createClient(store) {
   const window = {
     location: { search: '?room=ABC234', pathname: '/student.html', href: 'http://localhost/student.html?room=ABC234', hash: '' },
     teamManager: manager,
-    RoomState
+    RoomState,
+    setTimeout(callback, delay) { const timer = { callback, delay, cleared: false }; timers.push(timer); return timer; },
+    clearTimeout(timer) { timer.cleared = true; }
   };
   const code = fs.readFileSync(path.join(__dirname, '..', 'cloud-sync.js'), 'utf8');
   vm.runInNewContext(code, { window, URL, URLSearchParams, Uint8Array, Date, Math, Promise, setTimeout, console });
@@ -63,6 +67,10 @@ function createClient(store) {
   sync.channel = { send: () => Promise.resolve('ok') };
   sync.realtimeReady = true;
   sync.isConnected = true;
+  sync.clockServerAtAnchor = Date.now();
+  sync.clockMonotonicAnchor = Date.now();
+  sync.clockSyncedAt = Date.now();
+  sync.testTimers = timers;
   return sync;
 }
 
@@ -105,5 +113,55 @@ test('join links keep the room code and specify the current release', () => {
   const sync = createClient({ conflicts: 0, room: makeRoom() });
   const url = new URL(sync.getJoinUrl());
   assert.equal(url.searchParams.get('room'), 'ABC234');
-  assert.equal(url.searchParams.get('v'), '20261113-1');
+  assert.equal(url.searchParams.get('v'), '20261113-2');
+});
+
+test('server clock uses monotonic time instead of the device wall clock', async () => {
+  const sync = createClient({ conflicts: 0, room: makeRoom() });
+  let monotonic = 1000;
+  sync.monotonicNow = () => monotonic;
+  sync.supabase.rpc = async () => {
+    monotonic += 80;
+    return { data: 1700000000000, error: null };
+  };
+  await sync.syncClock();
+  assert.equal(sync.serverNow(), 1700000000040);
+  monotonic += 2000;
+  assert.equal(sync.serverNow(), 1700000002040);
+});
+
+test('deadline scheduling is replaced on restart and cancelled on completion', () => {
+  const store = { conflicts: 0, room: makeRoom() };
+  store.room.lesson_state = RoomState.createLessonState(store.room.teams, false);
+  store.room.lesson_state.timer = { startedAt: 1000, durationMs: 180000, endedAt: null, reason: null };
+  const sync = createClient(store);
+  sync.serverNow = () => 10000;
+  sync.applyRoom(store.room);
+  assert.equal(sync.testTimers[0].delay, 171000);
+  const restarted = structuredClone(store.room);
+  restarted.updated_at = '2026-01-01T00:00:01.000Z';
+  restarted.match_start_time = 20000;
+  restarted.lesson_state.timer.startedAt = 20000;
+  sync.applyRoom(restarted);
+  assert.equal(sync.testTimers[0].cleared, true);
+  assert.equal(sync.testTimers[1].delay, 190000);
+  const completed = structuredClone(restarted);
+  completed.updated_at = '2026-01-01T00:00:02.000Z';
+  completed.lesson_state.timer.endedAt = 21000;
+  completed.lesson_state.timer.reason = 'completed';
+  sync.applyRoom(completed);
+  assert.equal(sync.testTimers[1].cleared, true);
+  assert.equal(sync.expiryKey, null);
+});
+
+test('server rejects a submission that arrives after the deadline', async () => {
+  const store = { conflicts: 0, room: makeRoom(), updateError: { code: 'P0001', message: 'ROUND_TIME_EXPIRED' } };
+  store.room.lesson_state = RoomState.createLessonState(store.room.teams, false);
+  store.room.lesson_state.timer = { startedAt: 1000, durationMs: 180000, endedAt: null, reason: null };
+  const sync = createClient(store);
+  sync.serverNow = () => 180999;
+  await assert.rejects(sync.publish({
+    type: 'STUDENT_COMPLETED', payload: { teamId: 1, memberId: 1, stageIdx: 0, roundStartTime: 1000 }
+  }), { code: 'ROUND_EXPIRED' });
+  assert.equal(store.room.teams[0].members[0].completed, false);
 });
