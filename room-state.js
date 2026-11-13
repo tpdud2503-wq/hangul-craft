@@ -58,7 +58,6 @@ const RoomState = (() => {
       ids.add(mission.id);
     }
     if (!state.legacy && (!state.missions[0].isPractice || state.missions.length < 2)) return false;
-    if (state.legacy && state.missions.some(mission => mission.isPractice)) return false;
     if (state.timer != null) {
       const timer = state.timer;
       if (!isObject(timer) || !Number.isSafeInteger(timer.startedAt) || timer.startedAt < 0 ||
@@ -300,6 +299,21 @@ const RoomState = (() => {
         clearRound(lesson, lesson.missions[next.stage_idx].id);
         resetTeams(next.teams);
         break;
+      case 'START_PRACTICE': {
+        let index = lesson.missions.findIndex(mission => mission.isPractice);
+        if (index < 0) {
+          if (lesson.missions.some(mission => mission.id === 'practice')) {
+            throw error('INVALID_MISSION', '연습 문제를 추가할 수 없습니다.');
+          }
+          lesson.missions.unshift({ id: 'practice', word: '가', isPractice: true });
+          index = 0;
+        }
+        next.stage_idx = index;
+        clearRound(lesson, lesson.missions[index].id);
+        resetTeams(next.teams);
+        beginTimedRound(next, lesson, event.timestamp);
+        break;
+      }
       case 'STUDENT_COMPLETED': {
         const mission = lesson.missions[next.stage_idx];
         if (payload.stageIdx !== next.stage_idx ||
@@ -372,7 +386,8 @@ const RoomState = (() => {
         if (!validMissionId(id) || id === 'practice') throw error('INVALID_MISSION', '미션 정보가 올바르지 않습니다.');
         const existing = lesson.missions.find(mission => mission.id === id);
         if (existing && existing.word === word) return { changed: false, room: next };
-        if (existing || lesson.missions.length >= MAX_MISSIONS + (lesson.legacy ? 0 : 1)) {
+        const practiceCount = lesson.missions.some(mission => mission.isPractice) ? 1 : 0;
+        if (existing || lesson.missions.length >= MAX_MISSIONS + practiceCount) {
           throw error('INVALID_MISSION', `미션은 최대 ${MAX_MISSIONS}개까지 추가할 수 있습니다.`);
         }
         lesson.missions.push({ id, word, isPractice: false });

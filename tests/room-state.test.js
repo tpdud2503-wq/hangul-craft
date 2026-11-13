@@ -241,3 +241,53 @@ test('existing untimed rounds remain intact and an expired last round shows fina
   state = applyEvent(state, { type: 'EXPIRE_MATCH', timestamp: 185000, payload: { stageIdx: last, roundStartTime: 5000 } }).room;
   assert.equal(isFinalRoundComplete(state.lesson_state, last, state.teams, state.match_start_time), true);
 });
+
+test('practice can be started in a legacy room without losing accumulated scores', () => {
+  const old = room();
+  old.stage_idx = 2;
+  old.teams[0].score = 100;
+  old.teams[1].score = 80;
+  old.teams[0].members[0].completed = true;
+  const before = structuredClone(old);
+  let next = applyEvent(old, { type: 'START_PRACTICE', timestamp: 5000, payload: {} }).room;
+  assert.deepEqual(old, before);
+  assert.equal(next.lesson_state.legacy, true);
+  assert.equal(next.lesson_state.missions[0].isPractice, true);
+  assert.equal(next.lesson_state.missions[3].word, '나무');
+  assert.equal(next.stage_idx, 0);
+  assert.equal(next.lesson_state.timer.durationMs, ROUND_DURATION_MS);
+  assert.deepEqual(next.teams.map(team => team.score), [100, 80]);
+  assert.ok(next.teams.every(team => team.members.every(member => !member.completed)));
+  assert.equal(isValidRoom(next), true);
+  next = applyEvent(next, submit(1, 1, 6000, 0, 5000)).room;
+  next = applyEvent(next, submit(1, 2, 7000, 0, 5000)).room;
+  assert.equal(next.lesson_state.results.practice['1'].points, 0);
+  assert.equal(next.teams[0].score, 100);
+});
+
+test('restarting practice retains scores from completed regular rounds', () => {
+  let state = room();
+  state = applyEvent(state, submit(1, 1)).room;
+  state = applyEvent(state, submit(1, 2)).room;
+  assert.equal(state.teams[0].score, 10);
+  state = applyEvent(state, { type: 'START_PRACTICE', timestamp: 5000, payload: {} }).room;
+  assert.equal(state.stage_idx, 0);
+  assert.equal(state.lesson_state.missions[0].isPractice, true);
+  assert.equal(state.lesson_state.results.m1['1'].points, 10);
+  assert.equal(state.teams[0].score, 10);
+  assert.equal(isValidRoom(state), true);
+});
+
+test('returning to practice keeps scores in a current-format room', () => {
+  let state = room();
+  state.lesson_state = createLessonState(state.teams);
+  state = applyEvent(state, { type: 'STAGE_CHANGE', timestamp: 2000, payload: { stageIdx: 1, missionId: 'm1' } }).room;
+  state = applyEvent(state, submit(1, 1, 3000, 1, 2000)).room;
+  state = applyEvent(state, submit(1, 2, 4000, 1, 2000)).room;
+  state = applyEvent(state, { type: 'START_PRACTICE', timestamp: 5000, payload: {} }).room;
+  assert.equal(state.lesson_state.legacy, false);
+  assert.equal(state.lesson_state.results.m1['1'].points, 10);
+  assert.equal(state.teams[0].score, 10);
+  assert.equal(state.lesson_state.missions[0].isPractice, true);
+  assert.equal(isValidRoom(state), true);
+});

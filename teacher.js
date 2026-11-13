@@ -35,6 +35,7 @@ class TeacherDashboard {
     this.tRoomGuide = document.getElementById('t-room-guide');
 
     this.tStageSelect = document.getElementById('t-stage-select');
+    this.btnPractice = document.getElementById('btn-t-practice');
     this.roundTimer = document.getElementById('t-round-timer');
     this.timerElapsed = document.getElementById('t-timer-elapsed');
     this.timerStatus = document.getElementById('t-timer-status');
@@ -104,9 +105,15 @@ class TeacherDashboard {
 
     // 문제 선택 변경
     this.tStageSelect.addEventListener('change', (e) => {
+      if (e.target.value === 'practice') {
+        this.startPractice();
+        return;
+      }
       const idx = parseInt(e.target.value, 10);
       this.setStage(idx);
     });
+
+    this.btnPractice.addEventListener('click', () => this.startPractice());
 
     // 문제 일괄 시작 (리셋)
     this.btnStartProblem.addEventListener('click', async () => {
@@ -172,6 +179,7 @@ class TeacherDashboard {
       document.getElementById('btn-t-qr-toggle').disabled = !connected;
       document.getElementById('btn-t-copy-url').disabled = !connected;
       this.tJoinUrlInput.disabled = !connected;
+      this.btnPractice.disabled = !connected;
       this.btnStartProblem.disabled = !connected;
       this.tStageSelect.disabled = !connected;
       document.getElementById('btn-t-settings').disabled = !connected;
@@ -182,17 +190,22 @@ class TeacherDashboard {
   }
 
   updateRoomGuide(connected) {
-    const mission = window.teamManager.lessonState.missions[window.teamManager.currentStageIdx];
-    const timer = window.teamManager.lessonState.timer;
+    const lesson = window.teamManager.lessonState;
+    const mission = lesson.missions[window.teamManager.currentStageIdx];
+    const timer = lesson.timer;
     const expired = timer && timer.startedAt === window.teamManager.matchStartTime && timer.reason === 'timeout';
-    this.tRoomGuide.textContent = !connected
+    let guide = !connected
       ? '교사 방은 자동으로 열립니다. 연결이 완료되면 학생에게 QR을 보여 주세요.'
       : expired ? '3분이 종료되었습니다. 점수를 확인하고 다음 문제를 선택하세요.'
-      : window.cloudSync.realtimeReady
-        ? mission && mission.isPractice
-          ? '학생이 입장하면 문제 시작을 눌러 3분 연습을 시작하세요.'
-          : '교사 방이 열렸습니다. 학생이 QR로 입장한 뒤 문제를 진행해 주세요.'
-        : '교사 방이 열렸습니다. 실시간 연결이 차단되어 약 3초 간격으로 동기화합니다.';
+      : mission && mission.isPractice
+        ? window.teamManager.isMatchActive
+          ? '연습 중입니다. 연습은 점수에 반영되지 않습니다.'
+          : '연습 문제가 준비됐습니다. 학생 입장 후 연습 게임 시작을 눌러 주세요.'
+        : !lesson.missions.some(item => item.isPractice)
+          ? '기존 점수를 유지하면서 연습 게임 시작을 눌러 연습할 수 있습니다.'
+          : '교사 방이 열렸습니다. 학생이 QR로 입장한 뒤 문제를 진행해 주세요.';
+    if (connected && !window.cloudSync.realtimeReady) guide += ' (약 3초 간격으로 동기화)';
+    this.tRoomGuide.textContent = guide;
   }
 
   renderRoundTimer() {
@@ -211,6 +224,12 @@ class TeacherDashboard {
   renderStageSelect() {
     this.tStageSelect.innerHTML = '';
     const missions = window.teamManager.lessonState.missions;
+    if (!missions.some(mission => mission.isPractice)) {
+      const practice = document.createElement('option');
+      practice.value = 'practice';
+      practice.textContent = '🧪 연습 게임 시작';
+      this.tStageSelect.appendChild(practice);
+    }
     let round = 0;
     missions.forEach((mission, i) => {
       const opt = document.createElement('option');
@@ -220,6 +239,32 @@ class TeacherDashboard {
     });
     this.missionSignature = JSON.stringify(missions);
     this.tStageSelect.value = this.currentStageIdx;
+  }
+
+  async startPractice() {
+    if (!window.cloudSync.isConnected) {
+      this.tStageSelect.value = this.currentStageIdx;
+      return;
+    }
+    const manager = window.teamManager;
+    const current = manager.lessonState.missions[manager.currentStageIdx];
+    const hasProgress = manager.teams.some(team => team.members.some(member => member.completed));
+    if ((manager.isMatchActive || hasProgress || (current && !current.isPractice)) &&
+        !confirm('연습 문제를 시작하면 현재 풀이가 초기화됩니다. 누적 점수는 유지됩니다. 계속하시겠습니까?')) {
+      this.tStageSelect.value = this.currentStageIdx;
+      return;
+    }
+    this.btnPractice.disabled = true;
+    this.tStageSelect.disabled = true;
+    try {
+      await manager.broadcast('START_PRACTICE', {});
+      this.showToast('3분 연습 문제가 시작되었습니다.');
+    } catch (_) {
+      this.tStageSelect.value = this.currentStageIdx;
+    } finally {
+      this.btnPractice.disabled = !window.cloudSync.isConnected;
+      this.tStageSelect.disabled = !window.cloudSync.isConnected;
+    }
   }
 
   applyRoomStage(idx) {
@@ -417,7 +462,7 @@ class TeacherDashboard {
     if (lesson.legacy) {
       const notice = document.createElement('p');
       notice.className = 'settings-guide';
-      notice.textContent = '이전 수업방의 문제와 점수는 유지됩니다. 연습부터 새로 시작하려면 새 교사 방을 열어 주세요.';
+      notice.textContent = '이전 수업방의 점수와 문제는 유지됩니다. 교사 화면의 연습 게임 시작 버튼으로 연습할 수 있습니다.';
       this.missionList.appendChild(notice);
     }
     let round = 0;

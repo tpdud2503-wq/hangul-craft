@@ -284,6 +284,12 @@
   border-color: var(--royal-blue);
 }
 
+.t-action-btn.practice {
+  background: #fff3bf;
+  color: #704c00;
+  border-color: #c99200;
+}
+
 .t-action-btn.primary:hover {
   background: #143e5e;
 }

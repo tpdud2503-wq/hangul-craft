@@ -5,7 +5,7 @@ const SUPABASE_CONFIG = {
   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5cm5nbWFrcnZjeW51YWh4b2JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNzU2NzUsImV4cCI6MjEwOTk1MTY3NX0.1rwLrDh4fkyTfW9aiDkxkiicw0NRrsdHqK-23aMYUaE'
 };
 // HTML의 정적 파일 버전과 함께 갱신해 오래된 화면·스크립트 혼용을 방지한다.
-const APP_VERSION = '20261113-2';
+const APP_VERSION = '20261113-3';
 
 class CloudSync {
   constructor() {
@@ -338,6 +338,7 @@ class CloudSync {
     const manager = window.teamManager;
     const lesson = window.RoomState.getLessonState(room);
     const previousStart = manager.matchStartTime;
+    const previousActive = manager.isMatchActive;
     const previousState = this.hasRoomState;
     const newlyFinished = previousState ? room.teams.filter(team => team.isAllCompleted &&
       !manager.teams.some(previous => previous.id === team.id && previous.isAllCompleted)) : [];
@@ -355,8 +356,11 @@ class CloudSync {
       }
     }
     if (window.game) {
-      const roundChanged = previousState && previousStart !== manager.matchStartTime;
       const mission = lesson.missions[room.stage_idx];
+      const preservePractice = previousState && !previousActive && previousStart == null && manager.isMatchActive &&
+        mission.isPractice && window.game.currentStageIdx === room.stage_idx &&
+        window.game.currentMissionId === mission.id && window.game.currentWord === mission.word;
+      const roundChanged = previousState && previousStart !== manager.matchStartTime && !preservePractice;
       if (window.game.currentStageIdx !== room.stage_idx || window.game.currentMissionId !== mission.id ||
           window.game.currentWord !== mission.word || roundChanged) {
         window.game.loadStage(room.stage_idx, true);

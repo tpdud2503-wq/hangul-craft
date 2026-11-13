@@ -323,6 +323,8 @@ class StudentGame {
     if (!team) return;
     const clock = window.cloudSync ? window.cloudSync.getRoundClock() : { status: 'legacy' };
     const expired = clock.status === 'expired';
+    const currentMission = window.teamManager.lessonState.missions[window.teamManager.currentStageIdx];
+    const practiceWaiting = currentMission && currentMission.isPractice && !window.teamManager.isMatchActive && clock.status === 'waiting';
 
     const myMember = team.members.find(m => m.id === memberId);
     if (myMember && myMember.completed) {
@@ -336,7 +338,7 @@ class StudentGame {
       this.submitStatusMsg.classList.remove('hidden');
     } else {
       this.isSubmitted = false;
-      this.studentStatusBadge.textContent = expired ? '시간 종료 ⏰' : window.teamManager.isMatchActive ? '풀이 중 ✍️' : '교사 시작 대기';
+      this.studentStatusBadge.textContent = expired ? '시간 종료 ⏰' : practiceWaiting ? '자유 연습 중 🧪' : window.teamManager.isMatchActive ? '풀이 중 ✍️' : '교사 시작 대기';
       this.studentStatusBadge.className = 'student-status-chip solving';
       const connected = !window.cloudSync || window.cloudSync.isConnected;
       const ready = this.checkAllCompleted() && window.teamManager.isMatchActive && connected && !this.isSubmitting && !expired;
@@ -348,6 +350,7 @@ class StudentGame {
         ? '제출을 저장하는 중입니다...'
         : expired ? '3분이 지나 제출이 마감되었습니다'
         : !connected ? '실시간 연결을 기다리고 있습니다'
+        : practiceWaiting ? '자유롭게 연습하세요. 선생님이 시작하면 제출할 수 있습니다'
         : !window.teamManager.isMatchActive ? '선생님이 문제를 시작하면 제출할 수 있습니다'
         : ready ? '과제 완성! [제출 및 다음 스텝 준비 완료] 체크하기'
         : '모든 글자를 완성한 후 제출할 수 있습니다';

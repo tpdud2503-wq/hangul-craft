@@ -71,6 +71,7 @@ function createClient(store) {
   sync.clockMonotonicAnchor = Date.now();
   sync.clockSyncedAt = Date.now();
   sync.testTimers = timers;
+  sync.testWindow = window;
   return sync;
 }
 
@@ -113,7 +114,7 @@ test('join links keep the room code and specify the current release', () => {
   const sync = createClient({ conflicts: 0, room: makeRoom() });
   const url = new URL(sync.getJoinUrl());
   assert.equal(url.searchParams.get('room'), 'ABC234');
-  assert.equal(url.searchParams.get('v'), '20261113-2');
+  assert.equal(url.searchParams.get('v'), '20261113-3');
 });
 
 test('server clock uses monotonic time instead of the device wall clock', async () => {
@@ -164,4 +165,34 @@ test('server rejects a submission that arrives after the deadline', async () => 
     type: 'STUDENT_COMPLETED', payload: { teamId: 1, memberId: 1, stageIdx: 0, roundStartTime: 1000 }
   }), { code: 'ROUND_EXPIRED' });
   assert.equal(store.room.teams[0].members[0].completed, false);
+});
+
+test('starting the first practice preserves work done while waiting', () => {
+  const store = { conflicts: 0, room: makeRoom() };
+  const sync = createClient(store);
+  const manager = sync.testWindow.teamManager;
+  manager.lessonState = RoomState.createLessonState(manager.teams);
+  manager.currentStageIdx = 0;
+  manager.isMatchActive = false;
+  manager.matchStartTime = null;
+  let loads = 0;
+  sync.testWindow.game = {
+    currentStageIdx: 0, currentMissionId: 'practice', currentWord: '가',
+    loadStage() { loads++; }, updateTeamStatus() {}
+  };
+  sync.hasRoomState = true;
+  sync.serverNow = () => 5000;
+  const started = {
+    ...makeRoom(), match_start_time: 5000, lesson_state: RoomState.createLessonState(manager.teams),
+    updated_at: '2026-01-01T00:00:01.000Z'
+  };
+  started.lesson_state.timer = { startedAt: 5000, durationMs: 180000, endedAt: null, reason: null };
+  sync.applyRoom(started);
+  assert.equal(loads, 0);
+  const restarted = structuredClone(started);
+  restarted.match_start_time = 6000;
+  restarted.lesson_state.timer.startedAt = 6000;
+  restarted.updated_at = '2026-01-01T00:00:02.000Z';
+  sync.applyRoom(restarted);
+  assert.equal(loads, 1);
 });
