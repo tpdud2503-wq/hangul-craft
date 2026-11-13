@@ -22,6 +22,8 @@ class TeamManager {
 
     this.initBroadcastChannel();
     this.loadSettings();
+    this.lessonState = window.RoomState.createLessonState(this.teams);
+    this.currentStageIdx = 0;
   }
 
   initBroadcastChannel() {
@@ -319,6 +321,7 @@ class TeamManager {
       return this.broadcast('STUDENT_COMPLETED', {
         teamId, memberId,
         stageIdx: window.game.currentStageIdx,
+        missionId: this.lessonState.missions[window.game.currentStageIdx].id,
         roundStartTime: this.matchStartTime
       });
     }
@@ -335,8 +338,8 @@ class TeamManager {
       this.rankings.push(team);
       team.rank = this.rankings.length;
 
-      const scoreTable = [100, 80, 60, 40, 20, 10];
-      const earnedScore = scoreTable[team.rank - 1] || 10;
+      const mission = this.lessonState.missions[this.currentStageIdx];
+      const earnedScore = window.RoomState.pointsForRank(team.rank, mission && mission.isPractice);
       team.score += earnedScore;
 
       if (window.soundEngine) {

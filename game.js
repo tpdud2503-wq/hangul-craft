@@ -1234,7 +1234,7 @@ class HangulCraftGame {
         <div class="rank-pos">${title}</div>
         <div class="rank-team-name">${team.name}</div>
         <div class="rank-meta">소요시간: ${timeStr}</div>
-        <div class="rank-score">+${team.rank ? [100, 80, 60, 40, 20, 10][team.rank - 1] : 0}점</div>
+        <div class="rank-score">+${team.rank ? [10, 5, 5, 2, 2, 2, 2, 2][team.rank - 1] || 2 : 0}점</div>
       `;
       this.explRankContainer.appendChild(item);
     });

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261111-2">
+  <link rel="stylesheet" href="style.css?v=20261113-1">
   <style>
     /* 학생 모바일 최적화 스타일 */
     .student-header {
@@ -44,6 +44,8 @@
     .student-room-form button { padding: 8px 14px; cursor: pointer; }
     .student-room-form-help { width: 100%; color: var(--ink-gray); font-size: 0.9rem; line-height: 1.5; }
     .student-room-form.hidden { display: none; }
+    .vowel-reserve-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 10px 0; font-size: 0.9rem; }
+    .vowel-reserve-row button { padding: 6px 10px; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -90,12 +92,13 @@
 
     <!-- 우리 모둠 실시간 등수 알림 배너 (완주시 표시) -->
     <div id="team-rank-banner" class="team-rank-banner hidden"></div>
+    <div id="student-final-result" class="team-rank-banner hidden" role="status"></div>
 
     <!-- 스테이지 및 힌트 바 -->
     <section class="stage-bar">
       <div class="stage-info-group">
-        <span class="stage-label">시험 과제:</span>
-        <strong id="stage-display-title" style="font-size: 1.1rem; color: var(--royal-blue);">제1장: 하늘</strong>
+        <span class="stage-label">현재 미션:</span>
+        <strong id="stage-display-title" style="font-size: 1.1rem; color: var(--royal-blue);">연습 · 가</strong>
       </div>
       <button id="btn-toggle-hint" class="hint-toggle-btn">📜 훈수(힌트)</button>
     </section>
@@ -109,7 +112,7 @@
     <!-- 목표 단어 카드 및 조립대 -->
     <section class="quest-section">
       <div class="quest-header">
-        <span id="stage-title" class="quest-chapter">제1장</span>
+        <span id="stage-title" class="quest-chapter">연습 문제</span>
         <p id="stage-desc" class="quest-desc">단어 설명</p>
       </div>
 
@@ -271,12 +274,19 @@
         <div id="vowel-workbench" class="craft-board">
           <div class="craft-board-header">
             <span>🛠️ 모음 합성 작업대</span>
-            <button id="btn-clear-v" class="small-clear-btn">🧹 비우기</button>
+            <button id="btn-clear-v" class="small-clear-btn">🧹 작업대·보관함 비우기</button>
           </div>
 
           <div id="v-slots-container" class="workbench-slots">
             <span class="empty-hint">위의 삼재 기본자(ㆍ, ㅡ, ㅣ)를 누르세요</span>
           </div>
+
+          <div class="vowel-reserve-row">
+            <span>임시 보관: <strong id="v-reserve-status">비어 있음</strong></span>
+            <button id="btn-save-vowel" type="button" class="small-clear-btn" disabled>모음 보관</button>
+            <button id="btn-restore-vowel" type="button" class="small-clear-btn" disabled>보관 모음 꺼내기</button>
+          </div>
+          <p class="student-room-form-help">복합 모음을 만들 때 한 모음을 보관하고 다른 모음을 만든 뒤 꺼내 합성하세요.</p>
 
           <div class="action-button-group">
             <button id="btn-chochul" class="principle-btn btn-action-chochul" disabled>
@@ -327,11 +337,11 @@
   </div>
 
   <!-- 스크립트 연결 -->
-  <script src="room-state.js?v=20261111-2"></script>
-  <script src="cloud-sync.js?v=20261111-2"></script>
-  <script src="hangul-engine.js?v=20261111-2"></script>
-  <script src="sound-engine.js?v=20261111-2"></script>
-  <script src="team-manager.js?v=20261111-2"></script>
-  <script src="student.js?v=20261111-2"></script>
+  <script src="room-state.js?v=20261113-1"></script>
+  <script src="cloud-sync.js?v=20261113-1"></script>
+  <script src="hangul-engine.js?v=20261113-1"></script>
+  <script src="sound-engine.js?v=20261113-1"></script>
+  <script src="team-manager.js?v=20261113-1"></script>
+  <script src="student.js?v=20261113-1"></script>
 </body>
 </html>

@@ -5,7 +5,7 @@ const SUPABASE_CONFIG = {
   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5cm5nbWFrcnZjeW51YWh4b2JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNzU2NzUsImV4cCI6MjEwOTk1MTY3NX0.1rwLrDh4fkyTfW9aiDkxkiicw0NRrsdHqK-23aMYUaE'
 };
 // HTML의 정적 파일 버전과 함께 갱신해 오래된 화면·스크립트 혼용을 방지한다.
-const APP_VERSION = '20261111-2';
+const APP_VERSION = '20261113-1';
 
 class CloudSync {
   constructor() {
@@ -190,12 +190,21 @@ class CloudSync {
   }
 
   async createRoom() {
+    const initialTeams = JSON.parse(JSON.stringify(window.teamManager.teams));
+    initialTeams.forEach(team => {
+      team.score = 0;
+      team.rank = null;
+      team.isAllCompleted = false;
+      team.completedTime = null;
+      team.members.forEach(member => { member.completed = false; member.completedTime = null; });
+    });
     const initial = {
       room_id: this.roomId,
       stage_idx: 0,
-      is_match_active: false,
-      match_start_time: null,
-      teams: JSON.parse(JSON.stringify(window.teamManager.teams)),
+      is_match_active: true,
+      match_start_time: Date.now(),
+      teams: initialTeams,
+      lesson_state: window.RoomState.createLessonState(initialTeams),
       updated_at: new Date().toISOString()
     };
     const result = await this.supabase.from('game_rooms').insert(initial).select('*').single();
@@ -270,12 +279,15 @@ class CloudSync {
     if (Number.isFinite(version)) this.lastVersion = version;
 
     const manager = window.teamManager;
+    const lesson = window.RoomState.getLessonState(room);
     const previousStart = manager.matchStartTime;
     const previousState = this.hasRoomState;
     const newlyFinished = previousState ? room.teams.filter(team => team.isAllCompleted &&
       !manager.teams.some(previous => previous.id === team.id && previous.isAllCompleted)) : [];
     manager.isMatchActive = Boolean(room.is_match_active);
     manager.matchStartTime = room.match_start_time == null ? null : Number(room.match_start_time);
+    manager.lessonState = lesson;
+    manager.currentStageIdx = room.stage_idx;
     manager.applyTeamsConfig(room.teams, false);
 
     if (window.teacherDashboard) {
@@ -287,7 +299,9 @@ class CloudSync {
     }
     if (window.game) {
       const roundChanged = previousState && previousStart !== manager.matchStartTime;
-      if (window.game.currentStageIdx !== room.stage_idx || roundChanged) {
+      const mission = lesson.missions[room.stage_idx];
+      if (window.game.currentStageIdx !== room.stage_idx || window.game.currentMissionId !== mission.id ||
+          window.game.currentWord !== mission.word || roundChanged) {
         window.game.loadStage(room.stage_idx, true);
       }
       window.game.updateTeamStatus();
@@ -329,6 +343,7 @@ class CloudSync {
         is_match_active: next.is_match_active,
         match_start_time: next.match_start_time,
         teams: next.teams,
+        lesson_state: next.lesson_state,
         updated_at: new Date(nextMs).toISOString()
       };
       let query = this.supabase.from('game_rooms').update(changes).eq('room_id', this.roomId);

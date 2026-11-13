@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { applyEvent, isValidRoom } = require('../room-state.js');
+const { applyEvent, isValidRoom, createLessonState, getLessonState, standings, isFinalRoundComplete } = require('../room-state.js');
 
 function team(id, count = 2) {
   return {
@@ -27,7 +27,7 @@ test('simultaneous members are merged when an update is retried', () => {
   assert.equal(initial.teams[0].members[0].completed, false);
   assert.deepEqual(second.teams[0].members.map(member => member.completed), [true, true]);
   assert.equal(second.teams[0].rank, 1);
-  assert.equal(second.teams[0].score, 100);
+  assert.equal(second.teams[0].score, 10);
 });
 
 test('team completion order and scores remain consistent', () => {
@@ -36,10 +36,10 @@ test('team completion order and scores remain consistent', () => {
     state = applyEvent(state, event).room;
   }
   assert.deepEqual(state.teams.map(item => item.rank), [2, 1]);
-  assert.deepEqual(state.teams.map(item => item.score), [80, 100]);
+  assert.deepEqual(state.teams.map(item => item.score), [5, 10]);
   const duplicate = applyEvent(state, submit(2, 2));
   assert.equal(duplicate.changed, false);
-  assert.equal(duplicate.room.teams[1].score, 100);
+  assert.equal(duplicate.room.teams[1].score, 10);
 });
 
 test('old-round submissions cannot mark a new problem complete', () => {
@@ -49,13 +49,13 @@ test('old-round submissions cannot mark a new problem complete', () => {
   assert.throws(() => applyEvent(next, submit(1, 1)), { code: 'ROUND_CHANGED' });
 });
 
-test('reset clears the round without deleting cumulative scores', () => {
+test('reset clears the current round and does not award points twice', () => {
   let state = room();
   state = applyEvent(state, submit(1, 1)).room;
   state = applyEvent(state, submit(1, 2)).room;
   state = applyEvent(state, { type: 'RESET_MATCH', timestamp: 1000, payload: {} }).room;
   assert.equal(state.match_start_time, 1001);
-  assert.equal(state.teams[0].score, 100);
+  assert.equal(state.teams[0].score, 0);
   assert.equal(state.teams[0].rank, null);
   assert.ok(state.teams[0].members.every(member => !member.completed));
 });
@@ -84,4 +84,106 @@ test('malformed room data is rejected before rendering', () => {
   assert.equal(isValidRoom({ ...room(), teams: [null, team(2)] }), false);
   assert.equal(isValidRoom({ ...room(), teams: [team(1), { ...team(2), members: [null] }] }), false);
   assert.equal(isValidRoom({ ...room(), is_match_active: true, match_start_time: null }), false);
+});
+
+test('practice comes first and never changes the cumulative score', () => {
+  const state = room();
+  state.lesson_state = createLessonState(state.teams);
+  assert.equal(state.lesson_state.missions[0].word, '가');
+  assert.equal(state.lesson_state.missions[0].isPractice, true);
+  const first = applyEvent(state, submit(1, 1)).room;
+  const completed = applyEvent(first, submit(1, 2)).room;
+  assert.equal(completed.teams[0].rank, 1);
+  assert.equal(completed.teams[0].score, 0);
+  assert.equal(completed.lesson_state.results.practice['1'].points, 0);
+  const edited = applyEvent(completed, { type: 'UPDATE_MISSION', timestamp: 5000, payload: { missionId: 'practice', expectedWord: '가', word: '나' } }).room;
+  assert.equal(edited.lesson_state.missions[0].word, '나');
+  assert.equal(edited.teams[0].score, 0);
+  assert.equal(edited.teams[0].isAllCompleted, false);
+});
+
+test('first earns 10, second and third 5, and fourth onward 2', () => {
+  let state = room();
+  state.teams = Array.from({ length: 8 }, (_, index) => team(index + 1, 1));
+  for (let id = 1; id <= 8; id++) state = applyEvent(state, submit(id, 1)).room;
+  assert.deepEqual(state.teams.map(item => item.score), [10, 5, 5, 2, 2, 2, 2, 2]);
+});
+
+test('round scores accumulate and replay only clears the replayed round', () => {
+  let state = room();
+  state = applyEvent(state, submit(1, 1)).room;
+  state = applyEvent(state, submit(1, 2)).room;
+  state = applyEvent(state, { type: 'STAGE_CHANGE', timestamp: 5000, payload: { stageIdx: 1, missionId: 'm2' } }).room;
+  state = applyEvent(state, submit(2, 1, 6000, 1, 5000)).room;
+  state = applyEvent(state, submit(2, 2, 6000, 1, 5000)).room;
+  state = applyEvent(state, submit(1, 1, 6000, 1, 5000)).room;
+  state = applyEvent(state, submit(1, 2, 6000, 1, 5000)).room;
+  assert.deepEqual(state.teams.map(item => item.score), [15, 10]);
+  state = applyEvent(state, { type: 'RESET_MATCH', timestamp: 7000, payload: {} }).room;
+  assert.deepEqual(state.teams.map(item => item.score), [10, 0]);
+  assert.equal(state.lesson_state.results.m2, undefined);
+  assert.equal(state.lesson_state.results.m1['1'].points, 10);
+});
+
+test('editing and adding missions preserve other rounds and reject stale or invalid words', () => {
+  let state = room();
+  state = applyEvent(state, submit(1, 1)).room;
+  state = applyEvent(state, submit(1, 2)).room;
+  state = applyEvent(state, { type: 'STAGE_CHANGE', timestamp: 5000, payload: { stageIdx: 1, missionId: 'm2' } }).room;
+  state = applyEvent(state, submit(2, 1, 6000, 1, 5000)).room;
+  state = applyEvent(state, submit(2, 2, 6000, 1, 5000)).room;
+  state = applyEvent(state, { type: 'UPDATE_MISSION', timestamp: 6500, payload: { missionId: 'm1', expectedWord: '하늘', word: '학교' } }).room;
+  assert.deepEqual(state.teams.map(item => item.score), [0, 10]);
+  assert.equal(state.teams[1].isAllCompleted, true);
+  state = applyEvent(state, { type: 'UPDATE_MISSION', timestamp: 7000, payload: { missionId: 'm2', expectedWord: '바다', word: '연필' } }).room;
+  assert.deepEqual(state.teams.map(item => item.score), [0, 0]);
+  assert.equal(state.match_start_time, 7000);
+  assert.ok(state.teams.every(item => !item.isAllCompleted));
+  state = applyEvent(state, { type: 'ADD_MISSION', timestamp: 8000, payload: { missionId: 'extra-1', word: '사랑' } }).room;
+  assert.equal(state.lesson_state.missions.at(-1).word, '사랑');
+  assert.throws(() => applyEvent(state, { type: 'UPDATE_MISSION', payload: { missionId: 'm1', expectedWord: '하늘', word: '나무' } }), { code: 'MISSION_CHANGED' });
+  assert.throws(() => applyEvent(state, { type: 'ADD_MISSION', payload: { missionId: 'extra-2', word: 'abc' } }), { code: 'INVALID_WORD' });
+});
+
+test('legacy scores are retained and final standings handle ties', () => {
+  const old = room();
+  old.teams[0].score = 100;
+  assert.equal(getLessonState(old).legacy, true);
+  assert.equal(getLessonState(old).missions[0].word, '하늘');
+  const next = applyEvent(old, { type: 'ADD_MISSION', payload: { missionId: 'extra-1', word: '사랑' } }).room;
+  assert.equal(next.teams[0].score, 100);
+  const tied = [team(1), team(2), team(3)];
+  tied[0].score = 15; tied[1].score = 15; tied[2].score = 10;
+  assert.deepEqual(standings(tied).map(item => item.rank), [1, 1, 3]);
+  const lesson = createLessonState(tied);
+  tied.forEach(item => { item.isAllCompleted = true; });
+  assert.equal(isFinalRoundComplete(lesson, lesson.missions.length - 1, tied), true);
+  assert.equal(isFinalRoundComplete(lesson, 0, tied), false);
+});
+
+test('changing a roster only clears the current round and never revives removed team scores', () => {
+  let state = room();
+  state.teams.push(team(3, 1));
+  state = applyEvent(state, submit(3, 1)).room;
+  state = applyEvent(state, { type: 'STAGE_CHANGE', timestamp: 5000, payload: { stageIdx: 1, missionId: 'm2' } }).room;
+  state = applyEvent(state, submit(1, 1, 6000, 1, 5000)).room;
+  state = applyEvent(state, submit(1, 2, 6000, 1, 5000)).room;
+  const changed = structuredClone(state.teams).filter(item => item.id !== 3);
+  state = applyEvent(state, { type: 'UPDATE_TEAMS_CONFIG', timestamp: 7000, payload: { teams: changed } }).room;
+  assert.deepEqual(state.teams.map(item => item.score), [0, 0]);
+  assert.equal(state.lesson_state.results.m1['3'], undefined);
+  assert.equal(state.lesson_state.results.m2, undefined);
+  changed.push(team(3, 1));
+  state = applyEvent(state, { type: 'UPDATE_TEAMS_CONFIG', timestamp: 8000, payload: { teams: changed } }).room;
+  assert.equal(state.teams.find(item => item.id === 3).score, 0);
+});
+
+test('invalid round scores and mission words are rejected when reading a room', () => {
+  const state = room();
+  state.lesson_state = createLessonState(state.teams);
+  state.lesson_state.results.m1 = { 1: { rank: 1, points: 100, time: 2 } };
+  assert.equal(isValidRoom(state), false);
+  state.lesson_state.results = {};
+  state.lesson_state.missions[1].word = '<script>';
+  assert.equal(isValidRoom(state), false);
 });

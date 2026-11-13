@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261111-2">
-  <link rel="stylesheet" href="teacher.css?v=20261111-2">
+  <link rel="stylesheet" href="style.css?v=20261113-1">
+  <link rel="stylesheet" href="teacher.css?v=20261113-1">
 </head>
 <body class="teacher-dashboard-body">
   <div class="teacher-container">
@@ -30,6 +30,7 @@
         </div>
         <button id="btn-t-qr-toggle" class="ctrl-btn qr-btn">📱 학생 QR 크게보기</button>
         <button id="btn-t-settings" class="ctrl-btn">⚙️ 모둠/인원 설정</button>
+        <button id="btn-t-missions" class="ctrl-btn">✏️ 미션 단어 설정</button>
         <button id="btn-sound-toggle" class="ctrl-btn">🔊 소리 켜짐</button>
       </div>
     </header>
@@ -74,6 +75,7 @@
           <div class="t-btn-group">
             <button id="btn-t-start-problem" class="t-action-btn primary">🚀 문제 시작 / 다시 시작</button>
             <button id="btn-t-open-explanation" class="t-action-btn highlight">💡 문제 심층 해설 슬라이드 열기</button>
+            <button id="btn-t-final-results" class="t-action-btn">🏆 누적·최종 점수</button>
           </div>
         </div>
 
@@ -89,6 +91,41 @@
     </main>
   </div>
 
+  <!-- 교사가 미션 단어를 수정하거나 추가 -->
+  <div id="modal-teacher-missions" class="modal-overlay hidden">
+    <div class="modal-card t-settings-modal-card">
+      <div class="settings-header">
+        <h2>✏️ 미션 단어 설정</h2>
+        <button id="btn-t-close-missions" class="modal-close-btn" aria-label="닫기">&times;</button>
+      </div>
+      <div class="settings-body">
+        <p class="settings-guide">연습 문제는 점수에 반영되지 않습니다. 미션 단어는 한글 음절 1~10자로 입력하세요.<br>이미 진행한 단어를 바꾸면 해당 라운드 점수가 초기화됩니다.</p>
+        <p id="t-mission-error" class="mission-error" role="alert"></p>
+        <div id="t-mission-list" class="t-mission-list"></div>
+        <form id="t-add-mission-form" class="t-add-mission-form">
+          <label for="t-new-mission-word">새 미션 단어</label>
+          <input id="t-new-mission-word" type="text" maxlength="10" placeholder="예: 우리나라" required>
+          <button type="submit" class="action-small-btn">+ 미션 추가</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 누적 점수와 최종 순위 -->
+  <div id="modal-final-results" class="modal-overlay hidden">
+    <div class="modal-card t-settings-modal-card">
+      <div class="settings-header">
+        <h2>🏆 라운드별 점수와 최종 순위</h2>
+        <button id="btn-t-close-final" class="modal-close-btn" aria-label="닫기">&times;</button>
+      </div>
+      <div class="settings-body">
+        <p class="settings-guide">1등 10점 · 2~3등 5점 · 4등 이하 2점 · 미완주 0점<br>연습 문제는 점수에 포함되지 않습니다.</p>
+        <p id="t-final-legacy-note" class="settings-guide hidden">이전 수업방의 기존 누적 점수도 포함됩니다.</p>
+        <div id="t-final-results-list" class="t-final-results-list"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- 모둠별 개별 인원수 설정 모달 -->
   <div id="modal-teacher-settings" class="modal-overlay hidden">
     <div class="modal-card t-settings-modal-card">
@@ -101,7 +138,7 @@
         <p class="settings-guide">
           각 모둠별로 학생 수가 달라도 괜찮습니다! 모둠마다 학생 수를 자유롭게 설정하세요.<br>
           (해당 모둠의 학생 전원이 완성해야 최종 완주로 인정됩니다.)<br>
-          진행 중 모둠 구성이나 인원수를 바꾸면 현재 문제가 다시 시작됩니다.
+          진행 중 모둠 구성이나 인원수를 바꾸면 현재 문제와 그 라운드 점수가 초기화됩니다.
         </p>
 
         <!-- 모둠별 개별 인원수 리스트 -->
@@ -173,14 +210,14 @@
   </div>
 
   <!-- 스크립트 연결 -->
-  <script src="qrcode.min.js?v=20261111-2"></script>
-  <script src="qr-helper.js?v=20261111-2"></script>
-  <script src="room-state.js?v=20261111-2"></script>
-  <script src="cloud-sync.js?v=20261111-2"></script>
-  <script src="hangul-engine.js?v=20261111-2"></script>
-  <script src="sound-engine.js?v=20261111-2"></script>
-  <script src="team-manager.js?v=20261111-2"></script>
-  <script src="lesson-explanation.js?v=20261111-2"></script>
-  <script src="teacher.js?v=20261111-2"></script>
+  <script src="qrcode.min.js?v=20261113-1"></script>
+  <script src="qr-helper.js?v=20261113-1"></script>
+  <script src="room-state.js?v=20261113-1"></script>
+  <script src="cloud-sync.js?v=20261113-1"></script>
+  <script src="hangul-engine.js?v=20261113-1"></script>
+  <script src="sound-engine.js?v=20261113-1"></script>
+  <script src="team-manager.js?v=20261113-1"></script>
+  <script src="lesson-explanation.js?v=20261113-1"></script>
+  <script src="teacher.js?v=20261113-1"></script>
 </body>
 </html>

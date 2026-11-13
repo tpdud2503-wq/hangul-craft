@@ -2,17 +2,6 @@
  * 교사용 대시보드 인터랙션 스크립트
  */
 
-const STAGES = [
-  { word: '하늘', title: '제1장: 하늘과 땅' },
-  { word: '바다', title: '제2장: 깊고 넓은 바다' },
-  { word: '나무', title: '제3장: 사계절의 나무' },
-  { word: '태양', title: '제4장: 눈부신 태양' },
-  { word: '꽃', title: '제5장: 피어나는 꽃' },
-  { word: '맑은', title: '제6장: 맑은 샘물' },
-  { word: '세종대왕', title: '제7장: 성군 세종대왕' },
-  { word: '훈민정음', title: '제8장: 훈민정음' }
-];
-
 const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[char]);
@@ -20,8 +9,11 @@ const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
 class TeacherDashboard {
   constructor() {
     this.currentStageIdx = 0;
-    this.currentWord = STAGES[0].word;
+    this.currentWord = window.teamManager.lessonState.missions[0].word;
     this.settingsBusy = false;
+    this.missionBusy = false;
+    this.missionSignature = '';
+    this.lastFinalKey = null;
 
     this.initDOM();
     this.bindEvents();
@@ -52,6 +44,12 @@ class TeacherDashboard {
     this.bigQrContainer = document.getElementById('t-big-qr-container');
     this.bigRoomCode = document.getElementById('t-big-room-code');
     this.modalExplanation = document.getElementById('modal-lesson-explanation');
+    this.modalMissions = document.getElementById('modal-teacher-missions');
+    this.missionList = document.getElementById('t-mission-list');
+    this.missionError = document.getElementById('t-mission-error');
+    this.newMissionInput = document.getElementById('t-new-mission-word');
+    this.modalFinal = document.getElementById('modal-final-results');
+    this.finalResultsList = document.getElementById('t-final-results-list');
   }
 
   bindEvents() {
@@ -90,6 +88,15 @@ class TeacherDashboard {
       this.saveSettingsFromModal();
     });
 
+    document.getElementById('btn-t-missions').addEventListener('click', () => this.openMissionsModal());
+    document.getElementById('btn-t-close-missions').addEventListener('click', () => this.modalMissions.classList.add('hidden'));
+    document.getElementById('t-add-mission-form').addEventListener('submit', event => {
+      event.preventDefault();
+      this.addMission();
+    });
+    document.getElementById('btn-t-final-results').addEventListener('click', () => this.showFinalResults());
+    document.getElementById('btn-t-close-final').addEventListener('click', () => this.modalFinal.classList.add('hidden'));
+
     // 문제 선택 변경
     this.tStageSelect.addEventListener('change', (e) => {
       const idx = parseInt(e.target.value, 10);
@@ -98,6 +105,8 @@ class TeacherDashboard {
 
     // 문제 일괄 시작 (리셋)
     this.btnStartProblem.addEventListener('click', async () => {
+      const hasProgress = window.teamManager.isMatchActive && window.teamManager.teams.some(team => team.members.some(member => member.completed));
+      if (hasProgress && !confirm('이 문제를 다시 시작하면 현재 라운드의 제출과 점수가 초기화됩니다. 계속하시겠습니까?')) return;
       try {
         await window.teamManager.resetMatchState(true);
         window.soundEngine.playJing();
@@ -116,16 +125,17 @@ class TeacherDashboard {
     });
     document.getElementById('btn-expl-next-stage').addEventListener('click', () => {
       this.modalExplanation.classList.add('hidden');
-      if (this.currentStageIdx < STAGES.length - 1) {
+      if (this.currentStageIdx < window.teamManager.lessonState.missions.length - 1) {
         this.setStage(this.currentStageIdx + 1);
       } else {
-        this.setStage(0);
+        this.showFinalResults();
       }
     });
 
     // 팀 매니저 상태 변화 구독
     window.teamManager.onUpdate(() => {
       this.renderTeamsLive();
+      if (!this.modalFinal.classList.contains('hidden')) this.renderFinalResults();
     });
   }
 
@@ -153,44 +163,76 @@ class TeacherDashboard {
       this.tQrPending.classList.toggle('hidden', connected);
       this.tQrReady.classList.toggle('hidden', !connected);
       this.tQrPending.textContent = `QR코드 준비 중입니다. ${text}`;
-      this.tRoomGuide.textContent = !connected
-        ? '교사 방은 자동으로 열립니다. 연결이 완료되면 학생에게 QR을 보여 주세요.'
-        : window.cloudSync.realtimeReady
-          ? '교사 방이 열렸습니다. 학생이 QR로 입장한 뒤 문제 시작을 눌러 주세요.'
-          : '교사 방이 열렸습니다. 실시간 연결이 차단되어 약 3초 간격으로 동기화합니다.';
+      this.updateRoomGuide(connected);
       document.getElementById('btn-t-qr-toggle').disabled = !connected;
       document.getElementById('btn-t-copy-url').disabled = !connected;
       this.tJoinUrlInput.disabled = !connected;
       this.btnStartProblem.disabled = !connected;
       this.tStageSelect.disabled = !connected;
       document.getElementById('btn-t-settings').disabled = !connected;
+      document.getElementById('btn-t-missions').disabled = !connected;
       this.setSettingsControlsDisabled(!connected || this.settingsBusy);
+      this.setMissionControlsDisabled(!connected || this.missionBusy);
     });
+  }
+
+  updateRoomGuide(connected) {
+    const mission = window.teamManager.lessonState.missions[window.teamManager.currentStageIdx];
+    this.tRoomGuide.textContent = !connected
+      ? '교사 방은 자동으로 열립니다. 연결이 완료되면 학생에게 QR을 보여 주세요.'
+      : window.cloudSync.realtimeReady
+        ? mission && mission.isPractice
+          ? '연습 문제가 자동으로 시작됩니다. 학생에게 QR을 보여 주고, 준비되면 1라운드를 선택하세요.'
+          : '교사 방이 열렸습니다. 학생이 QR로 입장한 뒤 문제를 진행해 주세요.'
+        : '교사 방이 열렸습니다. 실시간 연결이 차단되어 약 3초 간격으로 동기화합니다.';
   }
 
   renderStageSelect() {
     this.tStageSelect.innerHTML = '';
-    STAGES.forEach((stg, i) => {
+    const missions = window.teamManager.lessonState.missions;
+    let round = 0;
+    missions.forEach((mission, i) => {
       const opt = document.createElement('option');
       opt.value = i;
-      opt.textContent = `${i + 1}. ${stg.word} (${stg.title.split(':')[0]})`;
+      opt.textContent = mission.isPractice ? `🧪 연습 문제: ${mission.word}` : `${++round}라운드: ${mission.word}`;
       this.tStageSelect.appendChild(opt);
     });
+    this.missionSignature = JSON.stringify(missions);
     this.tStageSelect.value = this.currentStageIdx;
   }
 
   applyRoomStage(idx) {
-    if (!STAGES[idx]) return;
+    const lesson = window.teamManager.lessonState;
+    const mission = lesson.missions[idx];
+    if (!mission) return;
+    if (this.missionSignature !== JSON.stringify(lesson.missions)) this.renderStageSelect();
     this.currentStageIdx = idx;
-    this.currentWord = STAGES[idx].word;
+    this.currentWord = mission.word;
     this.tStageSelect.value = idx;
+    this.updateRoomGuide(window.cloudSync.isConnected);
+    document.getElementById('btn-expl-next-stage').textContent = idx === lesson.missions.length - 1 ? '최종 점수 보기 ➔' : '다음 문제로 함께 진행 ➔';
+    this.renderTeamsLive();
+    if (window.RoomState.isFinalRoundComplete(lesson, idx, window.teamManager.teams)) {
+      const key = `${mission.id}:${window.teamManager.matchStartTime}`;
+      if (this.lastFinalKey !== key) {
+        this.lastFinalKey = key;
+        this.showFinalResults();
+      }
+    }
   }
 
   async setStage(idx) {
-    if (!STAGES[idx]) return;
+    const lesson = window.teamManager.lessonState;
+    const mission = lesson.missions[idx];
+    if (!mission) return;
+    if (lesson.results[mission.id] && Object.keys(lesson.results[mission.id]).length &&
+        !confirm('이 라운드를 다시 시작하면 해당 라운드 점수가 초기화됩니다. 계속하시겠습니까?')) {
+      this.tStageSelect.value = this.currentStageIdx;
+      return;
+    }
     this.tStageSelect.disabled = true;
     try {
-      await window.teamManager.broadcast('STAGE_CHANGE', { stageIdx: idx });
+      await window.teamManager.broadcast('STAGE_CHANGE', { stageIdx: idx, missionId: mission.id });
     } catch (_) {
       this.tStageSelect.value = this.currentStageIdx;
     } finally {
@@ -201,6 +243,8 @@ class TeacherDashboard {
   // 실시간 전광판 렌더링
   renderTeamsLive() {
     this.teamsLiveGrid.innerHTML = '';
+    const lesson = window.teamManager.lessonState;
+    const mission = lesson.missions[window.teamManager.currentStageIdx];
 
     window.teamManager.teams.forEach(team => {
       const card = document.createElement('div');
@@ -211,6 +255,10 @@ class TeacherDashboard {
       const percent = totalCount > 0 ? (doneCount / totalCount) * 100 : 0;
 
       const rank = Number.isInteger(Number(team.rank)) && Number(team.rank) > 0 ? Number(team.rank) : null;
+      const savedResult = mission && lesson.results[mission.id] && lesson.results[mission.id][String(team.id)];
+      const roundScore = mission && mission.isPractice ? '연습 문제 · 점수 미반영'
+        : rank && lesson.legacy && !savedResult ? '이전 라운드 기록'
+        : `이번 라운드: +${window.RoomState.pointsForRank(rank)}점`;
       let rankBadgeHtml = '';
       if (rank) {
         const medalIcons = ['🥇 1등', '🥈 2등', '🥉 3등'];
@@ -228,7 +276,7 @@ class TeacherDashboard {
           </div>
           ${rankBadgeHtml}
         </div>
-        <div class="dash-team-score">누적 점수: <strong>${escapeHtml(team.score)}점</strong></div>
+        <div class="dash-team-score">${roundScore} · 누적 점수: <strong>${escapeHtml(team.score)}점</strong></div>
         <div class="dash-progress-track">
           <div class="dash-progress-fill" style="width: ${percent}%;"></div>
         </div>
@@ -329,6 +377,130 @@ class TeacherDashboard {
     }
   }
 
+  setMissionControlsDisabled(disabled) {
+    this.modalMissions.querySelectorAll('button, input').forEach(control => {
+      if (control.id !== 'btn-t-close-missions') control.disabled = disabled;
+    });
+  }
+
+  openMissionsModal() {
+    this.missionError.textContent = '';
+    this.renderMissionList();
+    this.modalMissions.classList.remove('hidden');
+  }
+
+  renderMissionList() {
+    const lesson = window.teamManager.lessonState;
+    this.missionList.innerHTML = '';
+    if (lesson.legacy) {
+      const notice = document.createElement('p');
+      notice.className = 'settings-guide';
+      notice.textContent = '이전 수업방의 문제와 점수는 유지됩니다. 연습부터 새로 시작하려면 새 교사 방을 열어 주세요.';
+      this.missionList.appendChild(notice);
+    }
+    let round = 0;
+    lesson.missions.forEach(mission => {
+      const row = document.createElement('div');
+      row.className = 't-mission-row';
+      const label = document.createElement('label');
+      label.textContent = mission.isPractice ? '연습 문제' : `${++round}라운드`;
+      row.appendChild(label);
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.maxLength = 10;
+      input.value = mission.word;
+      input.setAttribute('aria-label', mission.isPractice ? '연습 문제 단어' : `${round}라운드 미션 단어`);
+      const save = document.createElement('button');
+      save.type = 'button';
+      save.className = 'action-small-btn';
+      save.textContent = '저장';
+      save.addEventListener('click', () => this.editMission(mission.id, mission.word, input.value));
+      row.appendChild(input);
+      row.appendChild(save);
+      this.missionList.appendChild(row);
+    });
+    this.setMissionControlsDisabled(!window.cloudSync.isConnected || this.missionBusy);
+  }
+
+  async runMissionAction(type, payload) {
+    if (this.missionBusy || !window.cloudSync.isConnected) return false;
+    this.missionBusy = true;
+    this.missionError.textContent = '';
+    this.setMissionControlsDisabled(true);
+    try {
+      await window.teamManager.broadcast(type, payload);
+      return true;
+    } catch (error) {
+      this.missionError.textContent = error.message || '미션을 저장하지 못했습니다.';
+      await window.cloudSync.refreshIfConnected();
+      return false;
+    } finally {
+      this.missionBusy = false;
+      this.renderMissionList();
+    }
+  }
+
+  async editMission(id, expectedWord, input) {
+    const word = input.trim().normalize('NFC');
+    if (!window.RoomState.validWord(word)) {
+      this.missionError.textContent = '미션은 한글 음절 1~10자로 입력해 주세요.';
+      return;
+    }
+    if (word === expectedWord) return;
+    const lesson = window.teamManager.lessonState;
+    const hasResults = lesson.results[id] && Object.keys(lesson.results[id]).length > 0;
+    const current = lesson.missions[window.teamManager.currentStageIdx];
+    const hasProgress = current && current.id === id && window.teamManager.teams.some(team => team.members.some(member => member.completed));
+    if ((hasResults || hasProgress) && !confirm('단어를 바꾸면 이 라운드의 제출과 점수가 초기화됩니다. 계속하시겠습니까?')) return;
+    if (await this.runMissionAction('UPDATE_MISSION', { missionId: id, expectedWord, word })) {
+      this.showToast('미션 단어가 모든 학생에게 동기화되었습니다.');
+    }
+  }
+
+  async addMission() {
+    const word = this.newMissionInput.value.trim().normalize('NFC');
+    if (!window.RoomState.validWord(word)) {
+      this.missionError.textContent = '미션은 한글 음절 1~10자로 입력해 주세요.';
+      return;
+    }
+    const id = `custom_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    if (await this.runMissionAction('ADD_MISSION', { missionId: id, word })) {
+      this.newMissionInput.value = '';
+      this.showToast('새 미션이 추가되었습니다.');
+    }
+  }
+
+  showFinalResults() {
+    this.renderFinalResults();
+    this.modalFinal.classList.remove('hidden');
+  }
+
+  renderFinalResults() {
+    const lesson = window.teamManager.lessonState;
+    const regular = lesson.missions.filter(mission => !mission.isPractice);
+    const hasPoints = window.teamManager.teams.some(team => team.score > 0);
+    document.getElementById('t-final-legacy-note').classList.toggle('hidden', !lesson.legacy);
+    this.finalResultsList.innerHTML = '';
+    window.RoomState.standings(window.teamManager.teams).forEach(({ team, rank }) => {
+      const row = document.createElement('div');
+      row.className = 't-final-result-row';
+      const name = document.createElement('span');
+      name.className = 'result-name';
+      name.textContent = `${hasPoints ? `${rank}등` : '순위 대기'} · ${team.name}`;
+      const score = document.createElement('strong');
+      score.className = 'result-score';
+      score.textContent = `${team.score}점`;
+      const rounds = document.createElement('span');
+      rounds.className = 'result-rounds';
+      rounds.textContent = regular.map((mission, index) => {
+        const result = lesson.results[mission.id] && lesson.results[mission.id][String(team.id)];
+        return `${index + 1}R ${mission.word}: ${result ? `${result.points}점` : '—'}`;
+      }).join(' · ');
+      row.append(name, score, rounds);
+      this.finalResultsList.appendChild(row);
+    });
+  }
+
   showBigQrModal() {
     const joinUrl = window.cloudSync.getJoinUrl();
     this.bigRoomCode.textContent = window.cloudSync.roomId;
@@ -338,8 +510,10 @@ class TeacherDashboard {
 
   showLessonExplanation() {
     const expl = window.LessonExplanations.generateExplanationForWord(this.currentWord);
-
-    document.getElementById('expl-modal-title').textContent = expl.title;
+    const lesson = window.teamManager.lessonState;
+    const currentMission = lesson.missions[this.currentStageIdx];
+    const round = lesson.missions.slice(0, this.currentStageIdx + 1).filter(item => !item.isPractice).length;
+    document.getElementById('expl-modal-title').textContent = `${currentMission.isPractice ? '연습 문제' : `${round}라운드`} · ‘${this.currentWord}’에 담긴 창제 원리`;
     document.getElementById('expl-summary-box').textContent = expl.summary;
 
     // 모둠 순위 발표
@@ -357,13 +531,18 @@ class TeacherDashboard {
       const item = document.createElement('div');
       item.className = `expl-rank-item ${team.rank ? 'rank-finished' : 'rank-dnf'}`;
       const title = team.rank ? medalIcons[team.rank - 1] : '도전중';
-      const timeStr = team.completedTime ? `${team.completedTime}초` : '-';
+      const timeStr = team.completedTime != null ? `${team.completedTime}초` : '-';
+      const mission = lesson.missions[this.currentStageIdx];
+      const points = window.RoomState.pointsForRank(Number(team.rank), mission && mission.isPractice);
+      const savedResult = lesson.results[mission.id] && lesson.results[mission.id][String(team.id)];
+      const scoreText = mission.isPractice ? '연습 · 점수 미반영'
+        : team.rank && lesson.legacy && !savedResult ? '이전 라운드 기록' : `+${points}점`;
 
       item.innerHTML = `
         <div class="rank-pos">${title}</div>
         <div class="rank-team-name">${escapeHtml(team.name)} (${team.members.length}명)</div>
         <div class="rank-meta">소요시간: ${timeStr}</div>
-        <div class="rank-score">+${team.rank ? [100, 80, 60, 40, 20, 10][team.rank - 1] || 10 : 0}점</div>
+        <div class="rank-score">${scoreText}</div>
       `;
       rankContainer.appendChild(item);
     });

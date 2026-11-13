@@ -349,6 +349,33 @@
   padding-right: 6px;
 }
 
+.t-mission-list, .t-final-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 48vh;
+  overflow-y: auto;
+}
+
+.t-mission-row, .t-add-mission-form, .t-final-result-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.t-mission-row label, .t-add-mission-form label { font-weight: 700; min-width: 5.5em; }
+.t-mission-row input, .t-add-mission-form input { flex: 1 1 8em; min-width: 0; padding: 8px; }
+.t-add-mission-form { margin-top: 14px; }
+.mission-error { color: #b42318; min-height: 1.3em; }
+.t-final-result-row .result-name { flex: 1 1 10em; font-weight: 700; }
+.t-final-result-row .result-score { font-size: 1.2rem; color: var(--royal-blue); }
+.t-final-result-row .result-rounds { flex-basis: 100%; font-size: 0.85rem; color: var(--ink-gray); }
+
 .t-team-cfg-item {
   background: #fdfbf7;
   border: 1.5px solid var(--border-light);

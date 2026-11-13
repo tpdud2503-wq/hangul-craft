@@ -79,7 +79,7 @@ test('conditioned writes retry and preserve concurrent student submissions', asy
   assert.ok(store.conflicts > 0);
   assert.ok(store.room.teams.every(team => team.members.every(member => member.completed)));
   assert.deepEqual(store.room.teams.map(team => team.rank).sort(), [1, 2]);
-  assert.deepEqual(store.room.teams.map(team => team.score).sort((a, b) => a - b), [80, 100]);
+  assert.deepEqual(store.room.teams.map(team => team.score).sort((a, b) => a - b), [5, 10]);
 });
 
 test('database polling keeps a room usable when realtime is blocked', async () => {
@@ -105,5 +105,5 @@ test('join links keep the room code and specify the current release', () => {
   const sync = createClient({ conflicts: 0, room: makeRoom() });
   const url = new URL(sync.getJoinUrl());
   assert.equal(url.searchParams.get('room'), 'ABC234');
-  assert.equal(url.searchParams.get('v'), '20261111-2');
+  assert.equal(url.searchParams.get('v'), '20261113-1');
 });

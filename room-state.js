@@ -1,6 +1,7 @@
 /** 방 상태를 서버의 최신 값에 적용하는 순수 함수. */
 const RoomState = (() => {
-  const SCORE_TABLE = [100, 80, 60, 40, 20, 10];
+  const DEFAULT_WORDS = ['하늘', '바다', '나무', '태양', '꽃', '맑은', '세종대왕', '훈민정음'];
+  const MAX_MISSIONS = 30;
 
   function error(code, message) {
     const result = new Error(message);
@@ -12,13 +13,91 @@ const RoomState = (() => {
     return JSON.parse(JSON.stringify(value));
   }
 
+  function validWord(word) {
+    return typeof word === 'string' && word === word.normalize('NFC') && /^[가-힣]{1,10}$/.test(word);
+  }
+
+  function pointsForRank(rank, isPractice = false) {
+    if (isPractice || !Number.isInteger(rank) || rank < 1) return 0;
+    if (rank === 1) return 10;
+    if (rank <= 3) return 5;
+    return 2;
+  }
+
+  function createLessonState(teams = [], includePractice = true) {
+    const missions = DEFAULT_WORDS.map((word, index) => ({ id: `m${index + 1}`, word, isPractice: false }));
+    if (includePractice) missions.unshift({ id: 'practice', word: '가', isPractice: true });
+    const baseScores = {};
+    teams.forEach(team => { baseScores[String(team.id)] = includePractice ? 0 : (Number(team.score) || 0); });
+    return { version: 1, legacy: !includePractice, missions, results: {}, baseScores };
+  }
+
+  function getLessonState(room) {
+    return room.lesson_state == null ? createLessonState(room.teams, false) : copy(room.lesson_state);
+  }
+
+  function isObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function validMissionId(id) {
+    return typeof id === 'string' && /^[A-Za-z0-9_-]{1,48}$/.test(id) &&
+      !['__proto__', 'constructor', 'prototype'].includes(id) && !Object.prototype.hasOwnProperty.call(Object.prototype, id);
+  }
+
+  function isValidLessonState(state) {
+    if (!isObject(state) || state.version !== 1 || typeof state.legacy !== 'boolean' ||
+        !Array.isArray(state.missions) || state.missions.length < 1 ||
+        state.missions.length > MAX_MISSIONS + 1 || !isObject(state.results) || !isObject(state.baseScores)) return false;
+    const ids = new Set();
+    for (let index = 0; index < state.missions.length; index++) {
+      const mission = state.missions[index];
+      if (!isObject(mission) || !validMissionId(mission.id) || ids.has(mission.id) || !validWord(mission.word) ||
+          typeof mission.isPractice !== 'boolean' || (mission.isPractice && (index !== 0 || mission.id !== 'practice'))) return false;
+      ids.add(mission.id);
+    }
+    if (!state.legacy && (!state.missions[0].isPractice || state.missions.length < 2)) return false;
+    if (state.legacy && state.missions.some(mission => mission.isPractice)) return false;
+    if (!Object.entries(state.baseScores).every(([id, score]) => /^[1-8]$/.test(id) && Number.isFinite(score) && score >= 0)) return false;
+    return Object.entries(state.results).every(([id, results]) => {
+      const mission = state.missions.find(item => item.id === id);
+      if (!mission || !isObject(results)) return false;
+      const ranks = new Set();
+      return Object.entries(results).every(([teamId, result]) => {
+        if (!/^[1-8]$/.test(teamId) || !isObject(result) || !Number.isInteger(result.rank) || result.rank < 1 ||
+            result.rank > 8 || ranks.has(result.rank) || result.points !== pointsForRank(result.rank, mission.isPractice) ||
+            !Number.isFinite(result.time) || result.time < 0) return false;
+        ranks.add(result.rank);
+        return true;
+      });
+    });
+  }
+
+  function standings(teams) {
+    const sorted = [...teams].sort((a, b) => b.score - a.score || a.id - b.id);
+    let previousScore = null;
+    let rank = 0;
+    return sorted.map((team, index) => {
+      if (index === 0 || team.score !== previousScore) rank = index + 1;
+      previousScore = team.score;
+      return { team, rank };
+    });
+  }
+
+  function isFinalRoundComplete(lesson, stageIdx, teams) {
+    return stageIdx === lesson.missions.length - 1 && !lesson.missions[stageIdx].isPractice &&
+      teams.length > 0 && teams.every(team => team.isAllCompleted);
+  }
+
   function isValidRoom(room) {
-    if (!room || !Number.isInteger(room.stage_idx) || room.stage_idx < 0 || room.stage_idx > 7 ||
+    if (!room || !Number.isInteger(room.stage_idx) || room.stage_idx < 0 ||
         !Array.isArray(room.teams) || room.teams.length < 2 || room.teams.length > 8 ||
         (room.is_match_active != null && typeof room.is_match_active !== 'boolean') ||
         (room.is_match_active && room.match_start_time == null) ||
         (room.match_start_time != null && (!Number.isSafeInteger(room.match_start_time) || room.match_start_time < 0)) ||
         (room.updated_at != null && !Number.isFinite(Date.parse(room.updated_at)))) return false;
+    if (room.lesson_state != null && !isValidLessonState(room.lesson_state)) return false;
+    if (room.stage_idx >= (room.lesson_state == null ? DEFAULT_WORDS.length : room.lesson_state.missions.length)) return false;
     const teamIds = new Set();
     return room.teams.every(team => {
       if (!team || typeof team !== 'object' || !Number.isInteger(team.id) || team.id < 1 || team.id > 8 || teamIds.has(team.id) ||
@@ -107,21 +186,53 @@ const RoomState = (() => {
     });
   }
 
+  function recalculateScores(teams, lesson) {
+    teams.forEach(team => {
+      const id = String(team.id);
+      if (!Object.prototype.hasOwnProperty.call(lesson.baseScores, id)) lesson.baseScores[id] = 0;
+      team.score = lesson.baseScores[id] + Object.values(lesson.results).reduce((total, results) => {
+        const result = results[id];
+        return total + (result ? result.points : 0);
+      }, 0);
+    });
+  }
+
+  function clearRound(lesson, missionId) {
+    delete lesson.results[missionId];
+  }
+
+  function normalizeWord(word) {
+    const normalized = typeof word === 'string' ? word.trim().normalize('NFC') : '';
+    if (!validWord(normalized)) throw error('INVALID_WORD', '미션은 한글 음절 1~10자로 입력해 주세요.');
+    return normalized;
+  }
+
   function applyEvent(room, event) {
     if (!room || !Array.isArray(room.teams) || !event || !event.type) {
       throw error('INVALID_ROOM', '방 상태를 읽을 수 없습니다.');
     }
     const next = copy(room);
     const payload = event.payload || {};
+    const lesson = getLessonState(next);
+    next.lesson_state = lesson;
 
     switch (event.type) {
       case 'UPDATE_TEAMS_CONFIG': {
+        const oldIds = new Set(next.teams.map(team => team.id));
         const teams = mergeConfig(next.teams, payload.teams);
         const rosterChanged = !sameRoster(next.teams, teams);
+        const newIds = new Set(teams.map(team => team.id));
+        oldIds.forEach(id => {
+          if (!newIds.has(id)) {
+            delete lesson.baseScores[String(id)];
+            Object.values(lesson.results).forEach(results => { delete results[String(id)]; });
+          }
+        });
         next.teams = teams;
         if (rosterChanged) {
           resetTeams(next.teams);
           if (next.is_match_active) {
+            clearRound(lesson, lesson.missions[next.stage_idx].id);
             next.match_start_time = nextStartTime(next.match_start_time, event.timestamp);
           }
         }
@@ -129,23 +240,29 @@ const RoomState = (() => {
       }
       case 'STAGE_CHANGE': {
         const stage = Number(payload.stageIdx);
-        if (!Number.isInteger(stage) || stage < 0 || stage > 7) {
+        if (!Number.isInteger(stage) || stage < 0 || stage >= lesson.missions.length) {
           throw error('INVALID_STAGE', '선택한 문제가 올바르지 않습니다.');
+        }
+        if (payload.missionId && payload.missionId !== lesson.missions[stage].id) {
+          throw error('MISSION_CHANGED', '미션 목록이 변경되었습니다. 다시 선택해 주세요.');
         }
         next.stage_idx = stage;
         next.is_match_active = true;
         next.match_start_time = nextStartTime(next.match_start_time, event.timestamp);
+        clearRound(lesson, lesson.missions[stage].id);
         resetTeams(next.teams);
         break;
       }
       case 'RESET_MATCH':
         next.is_match_active = true;
         next.match_start_time = nextStartTime(next.match_start_time, event.timestamp);
+        clearRound(lesson, lesson.missions[next.stage_idx].id);
         resetTeams(next.teams);
         break;
       case 'STUDENT_COMPLETED': {
+        const mission = lesson.missions[next.stage_idx];
         if (!next.is_match_active || payload.stageIdx !== next.stage_idx ||
-            payload.roundStartTime !== next.match_start_time) {
+            payload.roundStartTime !== next.match_start_time || (payload.missionId && payload.missionId !== mission.id)) {
           throw error('ROUND_CHANGED', '문제가 변경되었습니다. 현재 문제를 다시 확인해 주세요.');
         }
         const team = next.teams.find(item => item.id === payload.teamId);
@@ -161,17 +278,50 @@ const RoomState = (() => {
           team.isAllCompleted = true;
           team.completedTime = elapsed;
           team.rank = next.teams.reduce((highest, item) => Math.max(highest, Number(item.rank) || 0), 0) + 1;
-          team.score = (Number(team.score) || 0) + (SCORE_TABLE[team.rank - 1] || 10);
+          if (!lesson.results[mission.id]) lesson.results[mission.id] = {};
+          lesson.results[mission.id][String(team.id)] = {
+            rank: team.rank, points: pointsForRank(team.rank, mission.isPractice), time: elapsed
+          };
         }
+        break;
+      }
+      case 'UPDATE_MISSION': {
+        const index = lesson.missions.findIndex(mission => mission.id === payload.missionId);
+        if (index < 0) throw error('MISSION_CHANGED', '미션 목록이 변경되었습니다. 다시 확인해 주세요.');
+        const mission = lesson.missions[index];
+        if (payload.expectedWord != null && payload.expectedWord !== mission.word) {
+          throw error('MISSION_CHANGED', '다른 화면에서 단어를 수정했습니다. 다시 확인해 주세요.');
+        }
+        const word = normalizeWord(payload.word);
+        if (word === mission.word) return { changed: false, room: next };
+        mission.word = word;
+        clearRound(lesson, mission.id);
+        if (index === next.stage_idx) {
+          resetTeams(next.teams);
+          if (next.is_match_active) next.match_start_time = nextStartTime(next.match_start_time, event.timestamp);
+        }
+        break;
+      }
+      case 'ADD_MISSION': {
+        const id = payload.missionId;
+        const word = normalizeWord(payload.word);
+        if (!validMissionId(id) || id === 'practice') throw error('INVALID_MISSION', '미션 정보가 올바르지 않습니다.');
+        const existing = lesson.missions.find(mission => mission.id === id);
+        if (existing && existing.word === word) return { changed: false, room: next };
+        if (existing || lesson.missions.length >= MAX_MISSIONS + (lesson.legacy ? 0 : 1)) {
+          throw error('INVALID_MISSION', `미션은 최대 ${MAX_MISSIONS}개까지 추가할 수 있습니다.`);
+        }
+        lesson.missions.push({ id, word, isPractice: false });
         break;
       }
       default:
         throw error('INVALID_EVENT', '지원하지 않는 방 변경 요청입니다.');
     }
+    recalculateScores(next.teams, lesson);
     return { changed: true, room: next };
   }
 
-  return { applyEvent, isValidRoom };
+  return { applyEvent, isValidRoom, createLessonState, getLessonState, validWord, pointsForRank, standings, isFinalRoundComplete, MAX_MISSIONS };
 })();
 
 if (typeof window !== 'undefined') window.RoomState = RoomState;

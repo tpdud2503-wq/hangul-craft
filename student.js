@@ -13,6 +13,24 @@ const STAGES = [
   { word: '훈민정음', title: '제8장: 백성을 가르치는 바른 소리', desc: '모든 원리가 총망라된 우리 글자의 영원한 이름입니다.', story: '지혜로운 자는 아침나절에 깨칠 수 있고, 어리석은 자라도 열흘이면 배울 수 있는 만고의 문자입니다.' }
 ];
 
+function describeMission(lesson, index) {
+  const mission = lesson.missions[index];
+  if (mission.isPractice) return {
+    word: mission.word,
+    title: '연습 문제',
+    desc: '점수에 반영되지 않는 연습입니다. 자음과 모음을 조합해 보세요.',
+    story: `‘${mission.word}’를 만들며 자음과 모음 조합을 연습했습니다.`
+  };
+  const round = lesson.missions.slice(0, index + 1).filter(item => !item.isPractice).length;
+  const template = STAGES.find(item => item.word === mission.word);
+  return {
+    word: mission.word,
+    title: `제${round}라운드: ${template ? template.title.split(':').slice(1).join(':').trim() : mission.word}`,
+    desc: template ? template.desc : `‘${mission.word}’의 초성·중성·종성을 창제 원리에 따라 만들어 보세요.`,
+    story: template ? template.story : `‘${mission.word}’에 사용된 자음과 모음의 창제 원리를 다시 살펴보세요.`
+  };
+}
+
 const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[char]);
@@ -20,8 +38,9 @@ const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
 class StudentGame {
   constructor() {
     this.currentStageIdx = 0;
-    this.currentWord = STAGES[0].word;
-    this.currentStageData = STAGES[0];
+    this.currentMissionId = window.teamManager.lessonState.missions[0].id;
+    this.currentStageData = describeMission(window.teamManager.lessonState, 0);
+    this.currentWord = this.currentStageData.word;
 
     this.syllables = [];
     this.activeSyllableIdx = 0;
@@ -29,6 +48,8 @@ class StudentGame {
     this.consonantSlots = [];
     this.activeConsonantIdx = 0;
     this.vowelSlots = [];
+    this.vowelReserve = null;
+    this.nextSyllableTimer = null;
 
     this.initDOM();
     this.restoreStudentSelection();
@@ -96,6 +117,10 @@ class StudentGame {
     this.submitStatusMsg = document.getElementById('submit-status-message');
     this.submitTeamStatusText = document.getElementById('submit-team-status-text');
     this.teamRankBanner = document.getElementById('team-rank-banner');
+    this.finalResultBanner = document.getElementById('student-final-result');
+    this.vReserveStatus = document.getElementById('v-reserve-status');
+    this.btnSaveVowel = document.getElementById('btn-save-vowel');
+    this.btnRestoreVowel = document.getElementById('btn-restore-vowel');
     this.isSubmitted = false;
     this.isSubmitting = false;
   }
@@ -178,6 +203,8 @@ class StudentGame {
     this.btnJaechul.addEventListener('click', () => this.actionJaechul());
     this.btnHapseong.addEventListener('click', () => this.actionHapseong());
     this.btnClearV.addEventListener('click', () => this.clearVowelWorkbench());
+    this.btnSaveVowel.addEventListener('click', () => this.saveVowel());
+    this.btnRestoreVowel.addEventListener('click', () => this.restoreVowel());
 
     this.btnSendJung.addEventListener('click', () => this.sendVowel());
 
@@ -329,6 +356,13 @@ class StudentGame {
     // 우리 모둠이 완주했을 때 등수 배너 및 모달 즉시 표시
     if (team.isAllCompleted) {
       const rank = Number(team.rank) || 0;
+      const lesson = window.teamManager.lessonState;
+      const mission = lesson.missions[window.teamManager.currentStageIdx];
+      const points = window.RoomState.pointsForRank(rank, mission && mission.isPractice);
+      const savedResult = mission && lesson.results[mission.id] && lesson.results[mission.id][String(team.id)];
+      const scoreText = mission && mission.isPractice ? '연습 문제: 점수 미반영'
+        : lesson.legacy && !savedResult ? `이전 기록 · 누적 ${escapeHtml(team.score)}점`
+        : `이번 라운드 +${points}점 · 누적 ${escapeHtml(team.score)}점`;
       this.teamProgressText.textContent = `전원 완성! (${rank}등 🏆)`;
       this.teamRankBanner.classList.remove('hidden');
       const medalIcons = ['🥇', '🥈', '🥉'];
@@ -338,12 +372,21 @@ class StudentGame {
           <span class="rank-banner-medal">${icon}</span>
           <div class="rank-banner-text">
             <strong>우리 모둠 완주 성공! [${rank}등] 달성!</strong>
-            <span>완주 소요 시간: ${escapeHtml(team.completedTime)}초 | 획득 점수: +${[100, 80, 60, 40, 20, 10][rank - 1] || 10}점</span>
+            <span>완주 소요 시간: ${escapeHtml(team.completedTime)}초 | ${scoreText}</span>
           </div>
         </div>
       `;
     } else {
       this.teamRankBanner.classList.add('hidden');
+    }
+
+    const lesson = window.teamManager.lessonState;
+    if (window.RoomState.isFinalRoundComplete(lesson, window.teamManager.currentStageIdx, window.teamManager.teams)) {
+      const myStanding = window.RoomState.standings(window.teamManager.teams).find(item => item.team.id === teamId);
+      this.finalResultBanner.textContent = `🏆 최종 결과: 우리 모둠 ${myStanding.rank}등 · 총 ${team.score}점`;
+      this.finalResultBanner.classList.remove('hidden');
+    } else {
+      this.finalResultBanner.classList.add('hidden');
     }
   }
 
@@ -376,8 +419,13 @@ class StudentGame {
   }
 
   loadStage(idx, isAuto = false) {
+    const lesson = window.teamManager.lessonState;
+    const mission = lesson.missions[idx];
+    if (!mission) return;
+    if (this.nextSyllableTimer) clearTimeout(this.nextSyllableTimer);
     this.currentStageIdx = idx;
-    this.currentStageData = STAGES[idx];
+    this.currentMissionId = mission.id;
+    this.currentStageData = describeMission(lesson, idx);
     this.currentWord = this.currentStageData.word;
 
     this.isSubmitted = false;
@@ -394,7 +442,8 @@ class StudentGame {
       this.teamRankBanner.classList.add('hidden');
     }
 
-    this.stageDisplayTitle.textContent = `${idx + 1}. ${this.currentWord}`;
+    const round = lesson.missions.slice(0, idx + 1).filter(item => !item.isPractice).length;
+    this.stageDisplayTitle.textContent = mission.isPractice ? `연습 · ${this.currentWord}` : `${round}라운드 · ${this.currentWord}`;
     this.stageTitleEl.textContent = this.currentStageData.title;
     this.stageDescEl.textContent = this.currentStageData.desc;
 
@@ -482,6 +531,7 @@ class StudentGame {
       if (assembled === syl.char) {
         if (!syl.isDone) {
           syl.isDone = true;
+          this.clearConsonantWorkbench();
           this.activeCharPreviewEl.classList.add('match-success');
           window.soundEngine.playPyeongyeong(880);
           this.renderWordCards();
@@ -492,7 +542,8 @@ class StudentGame {
               window.soundEngine.playWordComplete();
             }
           } else {
-            setTimeout(() => {
+            this.nextSyllableTimer = setTimeout(() => {
+              this.nextSyllableTimer = null;
               const nextIdx = this.syllables.findIndex(s => !s.isDone);
               if (nextIdx !== -1) {
                 this.activeSyllableIdx = nextIdx;
@@ -696,6 +747,10 @@ class StudentGame {
   }
 
   renderVowelWorkbench() {
+    this.vReserveStatus.textContent = this.vowelReserve || '비어 있음';
+    this.btnSaveVowel.disabled = Boolean(this.vowelReserve) || this.vowelSlots.length !== 1 ||
+      !window.HangulEngine.JUNGSUNG.includes(this.vowelSlots[0]);
+    this.btnRestoreVowel.disabled = !this.vowelReserve || this.vowelSlots.length > 1;
     this.vSlotsContainerEl.innerHTML = '';
     if (this.vowelSlots.length === 0) {
       this.vSlotsContainerEl.innerHTML = '<span class="empty-hint">위의 삼재 기본자(ㆍ, ㅡ, ㅣ)를 누르세요</span>';
@@ -835,6 +890,21 @@ class StudentGame {
 
   clearVowelWorkbench() {
     this.vowelSlots = [];
+    this.vowelReserve = null;
+    this.renderVowelWorkbench();
+  }
+
+  saveVowel() {
+    if (this.btnSaveVowel.disabled) return;
+    this.vowelReserve = this.vowelSlots[0];
+    this.vowelSlots = [];
+    this.renderVowelWorkbench();
+  }
+
+  restoreVowel() {
+    if (this.btnRestoreVowel.disabled) return;
+    this.vowelSlots.push(this.vowelReserve);
+    this.vowelReserve = null;
     this.renderVowelWorkbench();
   }
 
