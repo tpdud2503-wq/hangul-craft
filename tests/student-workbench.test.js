@@ -15,7 +15,7 @@ function loadStudentGame() {
   const context = vm.createContext({ window, document, console, setTimeout, clearTimeout });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'hangul-engine.js'), 'utf8'), context);
   vm.runInContext(`${fs.readFileSync(path.join(__dirname, '..', 'student.js'), 'utf8')}\nwindow.TestStudentGame = StudentGame;`, context);
-  return { StudentGame: window.TestStudentGame, element };
+  return { StudentGame: window.TestStudentGame, element, window };
 }
 
 test('consonant workbench clears only after a syllable is correctly completed', () => {
@@ -73,4 +73,35 @@ test('final ㅇ must be made as old ieung while initial ㅇ remains available', 
   game.consonantSlots = ['ㆁ'];
   game.sendConsonant('jong');
   assert.equal(syllable.completedJong, 'ㆁ');
+});
+
+test('self-study preserves unfinished work when changing problems is cancelled', () => {
+  const { StudentGame, window } = loadStudentGame();
+  const game = Object.create(StudentGame.prototype);
+  const loaded = [];
+  Object.assign(game, {
+    currentStageIdx: 0,
+    selfStudyLesson: { missions: [{ word: '가방' }, { word: '하늘' }] },
+    selfStudySelect: { value: '1' },
+    syllables: [{ completedCho: 'ㄱ', completedJung: '', completedJong: '', isDone: false }],
+    loadStage(index) { loaded.push(index); }
+  });
+  window.confirm = () => false;
+  game.selectSelfStudyStage(1);
+  assert.equal(game.selfStudySelect.value, 0);
+  assert.deepEqual(loaded, []);
+  window.confirm = () => true;
+  game.selectSelfStudyStage(1);
+  assert.deepEqual(loaded, [1]);
+  game.selectSelfStudyStage(99);
+  assert.deepEqual(loaded, [1]);
+});
+
+test('self-study completion does not submit to a classroom', async () => {
+  const { StudentGame } = loadStudentGame();
+  const game = Object.create(StudentGame.prototype);
+  let celebrated = 0;
+  Object.assign(game, { isSelfStudy: true, checkAllCompleted: () => true, celebrateWordComplete() { celebrated++; } });
+  await game.handleStudentSubmit();
+  assert.equal(celebrated, 1);
 });

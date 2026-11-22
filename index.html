@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261113-4">
+  <link rel="stylesheet" href="style.css?v=20261122-1">
   <script>
     // 스마트 리다이렉트: URL에 방 코드(?room=)가 있으면 학생이 QR을 찍고 온 것이므로 student.html로 자동 이동
     (function() {
@@ -126,6 +126,24 @@
       color: #fff;
       border-color: var(--royal-red);
     }
+    .hub-self-study {
+      background: #fff;
+      border: 2px solid var(--border-ink);
+      border-radius: 14px;
+      padding: 28px 20px;
+      box-shadow: var(--shadow-medium);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .hub-self-study p { color: var(--ink-gray); font-size: 0.9rem; }
+    .hub-self-qr { max-width: 100%; border: 1px solid var(--border-light); border-radius: 8px; overflow: hidden; }
+    .hub-self-address { width: 100%; max-width: 520px; padding: 8px; border: 1px solid var(--border-light); border-radius: 6px; font-size: 0.85rem; }
+    .hub-self-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+    .hub-self-actions a, .hub-self-actions button { font: inherit; font-size: 0.9rem; font-weight: 700; padding: 8px 14px; border: 1.5px solid var(--border-ink); border-radius: 6px; background: #fff; color: var(--ink-black); text-decoration: none; cursor: pointer; }
+    .hub-self-actions a { background: var(--royal-green); color: #fff; border-color: var(--royal-green); }
+    .hub-self-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
     @media (max-width: 600px) {
       .hub-cards-grid {
         grid-template-columns: 1fr;
@@ -140,13 +158,14 @@
       <h1>집현전 한글 공방</h1>
       <p>
         훈민정음 창제 원리(상형·가획·합성·병서)를 배우는 실시간 모둠 대항전 게임<br>
-        역할을 선택하여 시작하세요.
+        역할을 선택하거나 혼자서 자유롭게 연습하세요.
       </p>
+      <a href="#solo-qr-section">자율 연습 QR 보기 ↓</a>
     </div>
 
     <div class="hub-cards-grid">
       <!-- 교사용 -->
-      <a href="teacher.html?v=20261113-4" class="hub-role-card teacher-card">
+      <a href="teacher.html?v=20261122-1" class="hub-role-card teacher-card">
         <span class="role-icon">👨‍🏫</span>
         <div class="role-title">선생님 (수업 진행)</div>
         <div class="role-desc">
@@ -158,7 +177,7 @@
       </a>
 
       <!-- 학생용 -->
-      <a href="student.html?v=20261113-4" class="hub-role-card student-card">
+      <a href="student.html?v=20261122-1" class="hub-role-card student-card">
         <span class="role-icon">🎓</span>
         <div class="role-title">학생 (게임 플레이)</div>
         <div class="role-desc">
@@ -170,11 +189,28 @@
       </a>
     </div>
 
+    <section id="solo-qr-section" class="hub-self-study" aria-labelledby="solo-qr-title">
+      <h2 id="solo-qr-title">🧭 혼자서 자율 연습</h2>
+      <p>교사 화면이나 방 코드 없이 기본 문제를 시간 제한 없이 풀 수 있습니다.<br>수업방 점수와는 별개이며 풀이 기록은 저장되지 않습니다.</p>
+      <div id="solo-qr" class="hub-self-qr"></div>
+      <label for="solo-address">학생 자율 연습 주소</label>
+      <input id="solo-address" class="hub-self-address" type="text" readonly>
+      <div class="hub-self-actions">
+        <a id="solo-open" href="student.html?mode=solo">혼자 연습 시작 ➔</a>
+        <button id="solo-copy" type="button">주소 복사</button>
+        <button id="solo-download" type="button">QR 이미지 저장</button>
+      </div>
+      <p id="solo-share-status" role="status" aria-live="polite">이 QR을 저장하거나 인쇄해 언제든 공유하세요.</p>
+    </section>
+
     <!-- 하단 도감 바로가기 -->
     <div class="game-footer" style="margin-top: 10px;">
       <p>훈민정음 해례본(訓民正音 解例本) 제자해(制字解) 원리에 기반한 웹 교육 애플리케이션</p>
       <p class="copyright">“지혜로운 사람은 아침나절에 깨치고, 어리석은 사람도 열흘이면 배울 수 있다.” — 정인지 서문</p>
     </div>
   </div>
+  <script src="qrcode.min.js?v=20261122-1"></script>
+  <script src="qr-helper.js?v=20261122-1"></script>
+  <script src="practice-qr.js?v=20261122-1"></script>
 </body>
 </html>

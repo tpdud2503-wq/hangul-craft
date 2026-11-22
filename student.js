@@ -37,9 +37,12 @@ const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
 
 class StudentGame {
   constructor() {
+    this.isSelfStudy = Boolean(window.isSelfStudy);
+    this.selfStudyLesson = this.isSelfStudy ? window.RoomState.createLessonState() : null;
+    const lesson = this.getLessonState();
     this.currentStageIdx = 0;
-    this.currentMissionId = window.teamManager.lessonState.missions[0].id;
-    this.currentStageData = describeMission(window.teamManager.lessonState, 0);
+    this.currentMissionId = lesson.missions[0].id;
+    this.currentStageData = describeMission(lesson, 0);
     this.currentWord = this.currentStageData.word;
 
     this.syllables = [];
@@ -52,13 +55,20 @@ class StudentGame {
     this.nextSyllableTimer = null;
 
     this.initDOM();
-    this.restoreStudentSelection();
+    if (this.isSelfStudy) this.initSelfStudy();
+    else this.restoreStudentSelection();
     this.bindEvents();
-    this.initCloud();
+    if (!this.isSelfStudy) this.initCloud();
     this.loadStage(0, false);
-    this.lastClockStatus = null;
-    this.renderRoundTimer();
-    this.timerInterval = window.setInterval(() => this.renderRoundTimer(), 250);
+    if (!this.isSelfStudy) {
+      this.lastClockStatus = null;
+      this.renderRoundTimer();
+      this.timerInterval = window.setInterval(() => this.renderRoundTimer(), 250);
+    }
+  }
+
+  getLessonState() {
+    return this.isSelfStudy ? this.selfStudyLesson : window.teamManager.lessonState;
   }
 
   initDOM() {
@@ -67,6 +77,9 @@ class StudentGame {
     this.roomForm = document.getElementById('student-room-form');
     this.roomInput = document.getElementById('student-room-input');
     this.roomHelp = document.getElementById('student-room-help');
+    this.selfStudyControls = document.getElementById('self-study-controls');
+    this.selfStudySelect = document.getElementById('self-study-select');
+    this.selfStudyReset = document.getElementById('self-study-reset');
     this.selectionKey = `hangul_student_selection_${window.cloudSync && window.cloudSync.roomId || 'local'}`;
     this.selectMyTeam = document.getElementById('select-my-team');
     this.selectMyMember = document.getElementById('select-my-member');
@@ -117,6 +130,7 @@ class StudentGame {
     this.hintPanel = document.getElementById('hint-panel');
     this.hintContent = document.getElementById('hint-content');
     this.modalComplete = document.getElementById('modal-complete');
+    this.btnNextStage = document.getElementById('btn-next-stage');
 
     // 학생 제출 및 준비 완료 요소
     this.btnStudentSubmit = document.getElementById('btn-student-submit');
@@ -129,6 +143,30 @@ class StudentGame {
     this.btnRestoreVowel = document.getElementById('btn-restore-vowel');
     this.isSubmitted = false;
     this.isSubmitting = false;
+  }
+
+  initSelfStudy() {
+    this.selfStudyLesson.missions.forEach((mission, index) => {
+      const option = document.createElement('option');
+      option.value = index;
+      option.textContent = index === 0 ? `연습 · ${mission.word}` : `${index}. ${mission.word}`;
+      this.selfStudySelect.appendChild(option);
+    });
+    this.selfStudyControls.classList.remove('hidden');
+  }
+
+  selectSelfStudyStage(index, retry = false) {
+    if (!Number.isInteger(index) || index < 0 || index >= this.selfStudyLesson.missions.length) {
+      this.selfStudySelect.value = this.currentStageIdx;
+      return;
+    }
+    const hasProgress = this.syllables.some(syl => syl.completedCho || syl.completedJung || syl.completedJong);
+    if (hasProgress && (retry || !this.checkAllCompleted()) &&
+        !window.confirm('현재 풀이가 초기화됩니다. 계속하시겠습니까?')) {
+      this.selfStudySelect.value = this.currentStageIdx;
+      return;
+    }
+    this.loadStage(index, false);
   }
 
   restoreStudentSelection() {
@@ -144,17 +182,22 @@ class StudentGame {
   }
 
   bindEvents() {
-    this.roomForm.addEventListener('submit', event => {
-      event.preventDefault();
-      const room = this.roomInput.value.trim().toUpperCase();
-      if (!/^[A-Z0-9]{5,8}$/.test(room)) {
-        this.showToast('방 코드는 영문과 숫자 5~8자리입니다.');
-        return;
-      }
-      const url = new URL(window.location.href);
-      url.searchParams.set('room', room);
-      window.location.assign(url.toString());
-    });
+    if (this.isSelfStudy) {
+      this.selfStudySelect.addEventListener('change', () => this.selectSelfStudyStage(Number(this.selfStudySelect.value)));
+      this.selfStudyReset.addEventListener('click', () => this.selectSelfStudyStage(this.currentStageIdx, true));
+    } else {
+      this.roomForm.addEventListener('submit', event => {
+        event.preventDefault();
+        const room = this.roomInput.value.trim().toUpperCase();
+        if (!/^[A-Z0-9]{5,8}$/.test(room)) {
+          this.showToast('방 코드는 영문과 숫자 5~8자리입니다.');
+          return;
+        }
+        const url = new URL(window.location.href);
+        url.searchParams.set('room', room);
+        window.location.assign(url.toString());
+      });
+    }
     this.tabConsonant.addEventListener('click', () => this.switchTab('consonant'));
     this.tabVowel.addEventListener('click', () => this.switchTab('vowel'));
 
@@ -163,8 +206,12 @@ class StudentGame {
       window.soundEngine.playGayageum(440);
     });
 
-    document.getElementById('btn-next-stage').addEventListener('click', () => {
+    this.btnNextStage.addEventListener('click', () => {
       this.modalComplete.classList.add('hidden');
+      if (this.isSelfStudy) {
+        if (this.currentStageIdx + 1 < this.selfStudyLesson.missions.length) this.selectSelfStudyStage(this.currentStageIdx + 1);
+        else this.selfStudySelect.focus();
+      }
     });
 
     // 제출 및 준비 완료 버튼 클릭
@@ -173,15 +220,17 @@ class StudentGame {
     });
 
     // 팀 선택 변경
-    this.selectMyTeam.addEventListener('change', () => {
-      this.updateMemberSelect();
-      this.loadStage(this.currentStageIdx, false);
-      this.updateTeamStatus();
-    });
-    this.selectMyMember.addEventListener('change', () => {
-      this.loadStage(this.currentStageIdx, false);
-      this.updateTeamStatus();
-    });
+    if (!this.isSelfStudy) {
+      this.selectMyTeam.addEventListener('change', () => {
+        this.updateMemberSelect();
+        this.loadStage(this.currentStageIdx, false);
+        this.updateTeamStatus();
+      });
+      this.selectMyMember.addEventListener('change', () => {
+        this.loadStage(this.currentStageIdx, false);
+        this.updateTeamStatus();
+      });
+    }
 
     // 기본자 클릭
     document.querySelectorAll('.c-basic-btn').forEach(btn => {
@@ -238,16 +287,18 @@ class StudentGame {
     });
 
     // 팀 매니저 업데이트 콜백: 모둠 설정(인원수)이나 학생 완료 상태 변경 시 드롭다운과 상태 즉시 갱신!
-    window.teamManager.onUpdate(() => {
-      const previousTeam = this.selectMyTeam.value;
-      const previousMember = this.selectMyMember.value;
-      this.updateTeamSelect();
-      if (this.syllables.length && previousTeam && previousMember &&
-          (previousTeam !== this.selectMyTeam.value || previousMember !== this.selectMyMember.value)) {
-        this.loadStage(this.currentStageIdx, false);
-      }
-      this.updateTeamStatus();
-    });
+    if (!this.isSelfStudy) {
+      window.teamManager.onUpdate(() => {
+        const previousTeam = this.selectMyTeam.value;
+        const previousMember = this.selectMyMember.value;
+        this.updateTeamSelect();
+        if (this.syllables.length && previousTeam && previousMember &&
+            (previousTeam !== this.selectMyTeam.value || previousMember !== this.selectMyMember.value)) {
+          this.loadStage(this.currentStageIdx, false);
+        }
+        this.updateTeamStatus();
+      });
+    }
   }
 
   initCloud() {
@@ -310,6 +361,17 @@ class StudentGame {
   }
 
   updateTeamStatus() {
+    if (this.isSelfStudy) {
+      const ready = this.checkAllCompleted();
+      this.btnStudentSubmit.disabled = !ready;
+      this.btnStudentSubmit.classList.toggle('ready-to-submit', ready);
+      this.btnStudentSubmit.classList.remove('submitted');
+      this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = ready ? '🎉' : '⏳';
+      this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = ready
+        ? '단어 완성! 확인하기' : '모든 글자를 완성해 보세요';
+      this.submitStatusMsg.classList.add('hidden');
+      return;
+    }
     const teamId = parseInt(this.selectMyTeam.value, 10);
     const memberId = parseInt(this.selectMyMember.value, 10);
     window.teamManager.setCurrentStudent(teamId, memberId);
@@ -403,6 +465,10 @@ class StudentGame {
   }
 
   async handleStudentSubmit() {
+    if (this.isSelfStudy) {
+      if (this.checkAllCompleted()) this.celebrateWordComplete();
+      return;
+    }
     if (!this.checkAllCompleted() || this.isSubmitted || this.isSubmitting ||
         !window.teamManager.isMatchActive || (window.cloudSync && (!window.cloudSync.isConnected || window.cloudSync.getRoundClock().status === 'expired'))) return;
 
@@ -448,7 +514,7 @@ class StudentGame {
   }
 
   loadStage(idx, isAuto = false) {
-    const lesson = window.teamManager.lessonState;
+    const lesson = this.getLessonState();
     const mission = lesson.missions[idx];
     if (!mission) return;
     if (this.nextSyllableTimer) clearTimeout(this.nextSyllableTimer);
@@ -456,6 +522,7 @@ class StudentGame {
     this.currentMissionId = mission.id;
     this.currentStageData = describeMission(lesson, idx);
     this.currentWord = this.currentStageData.word;
+    if (this.isSelfStudy) this.selfStudySelect.value = idx;
 
     this.isSubmitted = false;
     if (this.btnStudentSubmit) {
@@ -472,8 +539,9 @@ class StudentGame {
     }
 
     const round = lesson.missions.slice(0, idx + 1).filter(item => !item.isPractice).length;
-    this.stageDisplayTitle.textContent = mission.isPractice ? `연습 · ${this.currentWord}` : `${round}라운드 · ${this.currentWord}`;
-    this.stageTitleEl.textContent = this.currentStageData.title;
+    this.stageDisplayTitle.textContent = this.isSelfStudy ? `자율 연습 · ${this.currentWord}`
+      : mission.isPractice ? `연습 · ${this.currentWord}` : `${round}라운드 · ${this.currentWord}`;
+    this.stageTitleEl.textContent = this.isSelfStudy ? '자율 연습' : this.currentStageData.title;
     this.stageDescEl.textContent = this.currentStageData.desc;
 
     this.syllables = [];
@@ -567,7 +635,8 @@ class StudentGame {
 
           if (this.checkAllCompleted()) {
             if (!this.isSubmitted && this.btnStudentSubmit) {
-              this.showToast('단어를 완성했습니다! 시작된 문제라면 아래 제출 버튼을 눌러 주세요. 🎉');
+              this.showToast(this.isSelfStudy ? '단어를 완성했습니다! 완성 확인을 눌러 주세요. 🎉'
+                : '단어를 완성했습니다! 시작된 문제라면 아래 제출 버튼을 눌러 주세요. 🎉');
               window.soundEngine.playWordComplete();
             }
           } else {
@@ -604,8 +673,6 @@ class StudentGame {
   celebrateWordComplete() {
     window.soundEngine.playWordComplete();
 
-    const cur = window.teamManager.currentStudent;
-    const team = window.teamManager.teams.find(t => t.id === cur.teamId);
     const modalTitle = document.getElementById('modal-complete-title');
     const modalWord = document.getElementById('modal-complete-word');
     const modalStory = document.getElementById('modal-complete-story');
@@ -615,24 +682,32 @@ class StudentGame {
     modalWord.textContent = this.currentWord;
     modalStory.textContent = this.currentStageData.story;
 
-    if (team) {
-      const doneCount = team.members.filter(m => m.completed).length;
-      const totalCount = team.members.length;
+    if (this.isSelfStudy) {
+      modalTeamInfo.textContent = '완성한 단어는 수업 점수에 반영되지 않습니다.';
+      this.btnNextStage.textContent = this.currentStageIdx + 1 < this.selfStudyLesson.missions.length
+        ? '다음 문제 풀기 ➔' : '다른 문제 고르기';
+    } else {
+      const cur = window.teamManager.currentStudent;
+      const team = window.teamManager.teams.find(t => t.id === cur.teamId);
+      if (team) {
+        const doneCount = team.members.filter(m => m.completed).length;
+        const totalCount = team.members.length;
 
-      if (team.isAllCompleted) {
-        modalTeamInfo.innerHTML = `
-          <div class="team-all-done-banner">
-            🎉 <strong>${escapeHtml(team.name)}</strong> 전원 완성! <br>
-            <strong>우리 모둠 등수: <span class="rank-highlight">${Number(team.rank) || 0}등 🏆</span></strong> (소요 시간: ${escapeHtml(team.completedTime)}초)
-          </div>
-        `;
-      } else {
-        modalTeamInfo.innerHTML = `
-          <div class="team-waiting-banner">
-            🏃‍♂️ 나의 과제 제출 완료! <br>
-            우리 모둠원들의 제출을 기다리는 중입니다... (<strong>${doneCount} / ${totalCount}명 완료</strong>)
-          </div>
-        `;
+        if (team.isAllCompleted) {
+          modalTeamInfo.innerHTML = `
+            <div class="team-all-done-banner">
+              🎉 <strong>${escapeHtml(team.name)}</strong> 전원 완성! <br>
+              <strong>우리 모둠 등수: <span class="rank-highlight">${Number(team.rank) || 0}등 🏆</span></strong> (소요 시간: ${escapeHtml(team.completedTime)}초)
+            </div>
+          `;
+        } else {
+          modalTeamInfo.innerHTML = `
+            <div class="team-waiting-banner">
+              🏃‍♂️ 나의 과제 제출 완료! <br>
+              우리 모둠원들의 제출을 기다리는 중입니다... (<strong>${doneCount} / ${totalCount}명 완료</strong>)
+            </div>
+          `;
+        }
       }
     }
 
@@ -993,5 +1068,5 @@ class StudentGame {
 
 window.addEventListener('DOMContentLoaded', () => {
   window.game = new StudentGame();
-  if (window.cloudSync) window.cloudSync.start('student');
+  if (!window.game.isSelfStudy && window.cloudSync) window.cloudSync.start('student');
 });

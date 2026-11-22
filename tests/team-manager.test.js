@@ -56,3 +56,10 @@ test('saved team settings stay isolated from new-room defaults', () => {
   assert.equal(fresh.teams.length, 6);
   assert.ok(fresh.teams.every(team => team.members.length === 5));
 });
+
+test('self-study does not create a team manager, storage entry or broadcast channel', () => {
+  const window = { isSelfStudy: true };
+  const code = fs.readFileSync(path.join(__dirname, '..', 'team-manager.js'), 'utf8');
+  vm.runInNewContext(code, { window, console });
+  assert.equal(window.teamManager, undefined);
+});

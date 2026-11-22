@@ -367,4 +367,4 @@ class TeamManager {
   }
 }
 
-window.teamManager = new TeamManager();
+if (!window.isSelfStudy) window.teamManager = new TeamManager();

@@ -7,7 +7,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261113-4">
+  <link rel="stylesheet" href="style.css?v=20261122-1">
+  <script>
+    window.isSelfStudy = new URLSearchParams(window.location.search).get('mode') === 'solo';
+    if (window.isSelfStudy) document.documentElement.classList.add('self-study-mode');
+  </script>
   <style>
     /* 학생 모바일 최적화 스타일 */
     .student-header {
@@ -48,6 +52,13 @@
     .vowel-reserve-row button { padding: 6px 10px; cursor: pointer; }
     .student-timer { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 0.9rem; font-weight: 700; }
     .student-timer strong { font-family: monospace; font-size: 1.2rem; }
+    .self-study-mode .student-room-info, .self-study-mode .team-bar,
+    .self-study-mode #student-room-form, .self-study-mode #student-round-timer { display: none !important; }
+    .self-study-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 16px; background: #fff; border: 1.5px solid var(--border-ink); border-radius: 10px; }
+    .self-study-intro { width: 100%; }
+    .self-study-intro p { font-size: 0.9rem; color: var(--ink-gray); }
+    .self-study-controls label { font-weight: 700; }
+    .self-study-controls a { color: var(--royal-blue); }
   </style>
 </head>
 <body>
@@ -64,11 +75,23 @@
       </div>
     </header>
 
+    <section id="self-study-controls" class="self-study-controls hidden" aria-label="자율 연습 문제 선택">
+      <div class="self-study-intro">
+        <strong>🧭 혼자서 자율 연습</strong>
+        <p>교사나 방 코드 없이 시간 제한 없이 풀어 보세요. 기본 문제만 제공되며 풀이와 점수는 저장되지 않습니다.</p>
+      </div>
+      <label for="self-study-select">문제 선택:</label>
+      <select id="self-study-select" class="stage-dropdown"></select>
+      <button id="self-study-reset" class="action-small-btn" type="button">다시 풀기</button>
+      <a href="student.html">모둠 게임 입장</a>
+    </section>
+
     <form id="student-room-form" class="student-room-form hidden">
       <p id="student-room-help" class="student-room-form-help">선생님이 알려 준 방 코드를 입력해 주세요.</p>
       <label for="student-room-input">선생님이 알려 준 방 코드:</label>
       <input id="student-room-input" type="text" minlength="5" maxlength="8" pattern="[A-Za-z0-9]{5,8}" autocomplete="off" required>
       <button type="submit" class="royal-btn">방 입장</button>
+      <p class="student-room-form-help">방 코드가 없다면 <a href="student.html?mode=solo">혼자서 자율 연습</a>을 할 수 있습니다.</p>
     </form>
 
     <!-- 내 모둠 & 학생 선택 바 -->
@@ -342,11 +365,11 @@
   </div>
 
   <!-- 스크립트 연결 -->
-  <script src="room-state.js?v=20261113-4"></script>
-  <script src="cloud-sync.js?v=20261113-4"></script>
-  <script src="hangul-engine.js?v=20261113-4"></script>
-  <script src="sound-engine.js?v=20261113-4"></script>
-  <script src="team-manager.js?v=20261113-4"></script>
-  <script src="student.js?v=20261113-4"></script>
+  <script src="room-state.js?v=20261122-1"></script>
+  <script src="cloud-sync.js?v=20261122-1"></script>
+  <script src="hangul-engine.js?v=20261122-1"></script>
+  <script src="sound-engine.js?v=20261122-1"></script>
+  <script src="team-manager.js?v=20261122-1"></script>
+  <script src="student.js?v=20261122-1"></script>
 </body>
 </html>

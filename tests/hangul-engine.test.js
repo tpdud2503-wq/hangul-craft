@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const RoomState = require('../room-state.js');
 
 const window = {};
 const context = vm.createContext({ window });
@@ -24,4 +25,17 @@ test('known and custom explanations show the old ieung final', () => {
   assert.equal(known.points[1].jong.char, 'ㆁ');
   assert.equal(custom.points[0].jong.char, 'ㆁ');
   assert.match(custom.points[0].jong.text, /이체.*ㆁ/);
+});
+
+test('every default self-study word can be decomposed and composed with supported recipes', () => {
+  const engine = window.HangulEngine;
+  for (const mission of RoomState.createLessonState().missions) {
+    for (const char of mission.word) {
+      const { cho, jung, jong } = engine.decomposeSyllable(char);
+      assert.ok(engine.getConsonantRecipe(cho), `${char}: ${cho}`);
+      assert.ok(engine.getVowelRecipe(jung), `${char}: ${jung}`);
+      if (jong) assert.ok(engine.getFinalConsonantRecipe(jong), `${char}: ${jong}`);
+      assert.equal(engine.composeSyllable(cho, jung, jong === 'ㅇ' ? 'ㆁ' : jong), char);
+    }
+  }
 });
