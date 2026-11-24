@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { applyEvent, isValidRoom, createLessonState, getLessonState, standings, isFinalRoundComplete, getRoundClock, formatSeconds, ROUND_DURATION_MS } = require('../room-state.js');
+const { applyEvent, isValidRoom, createLessonState, createReviewLessonState, getLessonState, standings, isFinalRoundComplete, getRoundClock, formatSeconds, ROUND_DURATION_MS } = require('../room-state.js');
 
 function team(id, count = 2) {
   return {
@@ -100,6 +100,14 @@ test('practice comes first and never changes the cumulative score', () => {
   assert.equal(edited.lesson_state.missions[0].word, '나');
   assert.equal(edited.teams[0].score, 0);
   assert.equal(edited.teams[0].isAllCompleted, false);
+});
+
+test('self-study uses its own nine words without changing classroom defaults', () => {
+  const classroom = createLessonState();
+  const review = createReviewLessonState();
+  assert.deepEqual(review.missions.map(item => item.word), ['사과', '연필', '학교', '친구', '사랑', '고양이', '강아지', '공책', '우리말']);
+  assert.ok(review.missions.every(mission => !classroom.missions.some(item => item.word === mission.word)));
+  assert.equal(classroom.missions[0].word, '가방');
 });
 
 test('first earns 10, second and third 5, and fourth onward 2', () => {

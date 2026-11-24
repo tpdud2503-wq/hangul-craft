@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261122-1">
+  <link rel="stylesheet" href="style.css?v=20261124-1">
   <script>
     window.isSelfStudy = new URLSearchParams(window.location.search).get('mode') === 'solo';
     if (window.isSelfStudy) document.documentElement.classList.add('self-study-mode');
@@ -59,6 +59,9 @@
     .self-study-intro p { font-size: 0.9rem; color: var(--ink-gray); }
     .self-study-controls label { font-weight: 700; }
     .self-study-controls a { color: var(--royal-blue); }
+    .review-id-controls { width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .review-id-controls input { width: 8em; padding: 7px; font: inherit; border: 1.5px solid var(--border-ink); border-radius: 6px; }
+    .review-record-status { width: 100%; color: var(--ink-gray); font-size: 0.9rem; }
   </style>
 </head>
 <body>
@@ -77,9 +80,14 @@
 
     <section id="self-study-controls" class="self-study-controls hidden" aria-label="자율 연습 문제 선택">
       <div class="self-study-intro">
-        <strong>🧭 혼자서 자율 연습</strong>
-        <p>교사나 방 코드 없이 시간 제한 없이 풀어 보세요. 기본 문제만 제공되며 풀이와 점수는 저장되지 않습니다.</p>
+        <strong>🧭 혼자서 복습하기</strong>
+        <p>교사나 방 코드 없이 시간 제한 없이 복습해 보세요.</p>
       </div>
+      <div id="review-id-controls" class="review-id-controls hidden">
+        <label for="review-student-id">학번:</label>
+        <input id="review-student-id" type="text" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="off" placeholder="숫자 5자리" aria-describedby="review-record-status">
+      </div>
+      <p id="review-record-status" class="review-record-status" role="status" aria-live="polite"></p>
       <label for="self-study-select">문제 선택:</label>
       <select id="self-study-select" class="stage-dropdown"></select>
       <button id="self-study-reset" class="action-small-btn" type="button">다시 풀기</button>
@@ -365,11 +373,12 @@
   </div>
 
   <!-- 스크립트 연결 -->
-  <script src="room-state.js?v=20261122-1"></script>
-  <script src="cloud-sync.js?v=20261122-1"></script>
-  <script src="hangul-engine.js?v=20261122-1"></script>
-  <script src="sound-engine.js?v=20261122-1"></script>
-  <script src="team-manager.js?v=20261122-1"></script>
-  <script src="student.js?v=20261122-1"></script>
+  <script src="room-state.js?v=20261124-1"></script>
+  <script src="cloud-sync.js?v=20261124-1"></script>
+  <script src="hangul-engine.js?v=20261124-1"></script>
+  <script src="sound-engine.js?v=20261124-1"></script>
+  <script src="team-manager.js?v=20261124-1"></script>
+  <script src="review-recorder.js?v=20261124-1"></script>
+  <script src="student.js?v=20261124-1"></script>
 </body>
 </html>

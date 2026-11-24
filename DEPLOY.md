@@ -12,9 +12,10 @@ PowerShell이나 깃(Git) 설치가 전혀 필요 없는 가장 쉬운 방법입
 1. 웹 브라우저(크롬 등)에서 [https://app.netlify.com/drop](https://app.netlify.com/drop) 에 접속합니다.
    *(무료 회원가입 또는 구글 계정으로 로그인)*
 2. 별도의 배포 폴더를 만들고 아래 공개 파일만 복사합니다. `.git`, `.agents`, `opencode.json`, 테스트 파일 등은 올리지 마세요.
-   * `index.html`, `teacher.html`, `student.html`, `style.css`, `teacher.css`
+   * `index.html`, `teacher.html`, `student.html`, `review-setup.html`, `style.css`, `teacher.css`
    * `room-state.js`, `cloud-sync.js`, `team-manager.js`, `teacher.js`, `student.js`
    * `hangul-engine.js`, `sound-engine.js`, `lesson-explanation.js`, `qr-helper.js`, `qrcode.min.js`, `practice-qr.js`
+   * `review-recorder.js`, `review-setup.js`, `review-sheet.gs`
 3. 화면 가운데 점선 상자에 이 배포 폴더를 끌어다 놓습니다.
 4. 업로드가 완료되면 화면에 웹사이트 주소가 나타납니다.
    *(예: `https://hangul-craft-battle.netlify.app`)*
@@ -22,7 +23,7 @@ PowerShell이나 깃(Git) 설치가 전혀 필요 없는 가장 쉬운 방법입
 
 QR코드는 보통 브라우저에서 직접 생성됩니다. 주소가 매우 길어 로컬 생성이 불가능한 경우에는 `api.qrserver.com`으로 참여 주소가 전달됩니다.
 
-첫 화면의 **혼자서 자율 연습** QR은 수업방과 별개입니다. 인터넷 배포 주소에서 QR 이미지를 저장하거나 인쇄하면 교사 화면을 켜지 않아도 학생들이 기본 문제를 시간 제한 없이 풀 수 있습니다. 풀이 기록과 점수는 저장되지 않습니다.
+첫 화면의 **혼자서 복습하기** QR은 수업방과 별개이며 기본 QR은 기록을 저장하지 않습니다. **구글 시트 연동 QR 만들기**의 안내대로 교사가 비공개 시트를 설정해 별도의 QR을 만들면, 학생이 학번 5자리로 완료 기록을 보낼 수 있습니다. 학번만으로는 본인 확인이 되지 않으며 시트 공유를 제한해야 합니다. 제공된 Apps Script는 이 GitHub Pages 주소에 맞춰져 있으므로 다른 주소에서 사용하려면 코드의 `REVIEW_APP_ORIGIN`을 해당 사이트의 출처로 바꿔야 합니다.
 
 화면이나 스크립트를 수정해 다시 배포할 때는 HTML의 `?v=` 값과 `cloud-sync.js`의 `APP_VERSION`을 함께 변경하면 이전 파일이 캐시에 남는 것을 줄일 수 있습니다.
 

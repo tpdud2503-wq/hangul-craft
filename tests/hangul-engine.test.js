@@ -29,7 +29,7 @@ test('known and custom explanations show the old ieung final', () => {
 
 test('every default self-study word can be decomposed and composed with supported recipes', () => {
   const engine = window.HangulEngine;
-  for (const mission of RoomState.createLessonState().missions) {
+  for (const mission of RoomState.createReviewLessonState().missions) {
     for (const char of mission.word) {
       const { cho, jung, jong } = engine.decomposeSyllable(char);
       assert.ok(engine.getConsonantRecipe(cho), `${char}: ${cho}`);

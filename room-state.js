@@ -2,6 +2,7 @@
 const RoomState = (() => {
   const DEFAULT_WORDS = ['하늘', '바다', '나무', '태양', '꽃', '맑은', '세종대왕', '훈민정음'];
   const DEFAULT_PRACTICE_WORD = '가방';
+  const REVIEW_WORDS = ['사과', '연필', '학교', '친구', '사랑', '고양이', '강아지', '공책', '우리말'];
   const MAX_MISSIONS = 30;
   const ROUND_DURATION_MS = 3 * 60 * 1000;
 
@@ -36,6 +37,15 @@ const RoomState = (() => {
 
   function getLessonState(room) {
     return room.lesson_state == null ? createLessonState(room.teams, false) : copy(room.lesson_state);
+  }
+
+  function createReviewLessonState() {
+    const missions = REVIEW_WORDS.map((word, index) => ({
+      id: index === 0 ? 'practice' : `review${index}`,
+      word,
+      isPractice: index === 0
+    }));
+    return { version: 1, legacy: false, missions, results: {}, baseScores: {} };
   }
 
   function isObject(value) {
@@ -401,7 +411,7 @@ const RoomState = (() => {
     return { changed: true, room: next };
   }
 
-  return { applyEvent, isValidRoom, createLessonState, getLessonState, validWord, pointsForRank, standings, isFinalRoundComplete, getRoundClock, formatSeconds, MAX_MISSIONS, ROUND_DURATION_MS };
+  return { applyEvent, isValidRoom, createLessonState, createReviewLessonState, getLessonState, validWord, pointsForRank, standings, isFinalRoundComplete, getRoundClock, formatSeconds, MAX_MISSIONS, ROUND_DURATION_MS };
 })();
 
 if (typeof window !== 'undefined') window.RoomState = RoomState;

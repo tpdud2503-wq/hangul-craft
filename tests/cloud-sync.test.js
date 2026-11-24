@@ -114,7 +114,7 @@ test('join links keep the room code and specify the current release', () => {
   const sync = createClient({ conflicts: 0, room: makeRoom() });
   const url = new URL(sync.getJoinUrl());
   assert.equal(url.searchParams.get('room'), 'ABC234');
-  assert.equal(url.searchParams.get('v'), '20261122-1');
+  assert.equal(url.searchParams.get('v'), '20261124-1');
 });
 
 test('self-study does not create a cloud connection or classroom room', () => {

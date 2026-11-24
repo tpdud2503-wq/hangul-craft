@@ -101,7 +101,39 @@ test('self-study completion does not submit to a classroom', async () => {
   const { StudentGame } = loadStudentGame();
   const game = Object.create(StudentGame.prototype);
   let celebrated = 0;
-  Object.assign(game, { isSelfStudy: true, checkAllCompleted: () => true, celebrateWordComplete() { celebrated++; } });
+  Object.assign(game, { isSelfStudy: true, reviewConfig: { status: 'none' }, checkAllCompleted: () => true, celebrateWordComplete() { celebrated++; } });
   await game.handleStudentSubmit();
   assert.equal(celebrated, 1);
+});
+
+test('connected review accepts only five digits and retries the same unsaved record', async () => {
+  const { StudentGame, window } = loadStudentGame();
+  const game = Object.create(StudentGame.prototype);
+  const calls = [];
+  let celebrated = 0;
+  window.ReviewRecorder = {
+    newRequestId() { return 'a'.repeat(32); },
+    async send(payload) { calls.push({ ...payload }); if (calls.length === 1) throw new Error('확인 실패'); }
+  };
+  Object.assign(game, {
+    isSelfStudy: true, reviewConfig: { status: 'ready', scriptId: 'AKfycb1234567890_abcdef' },
+    reviewStudentId: { value: '홍길동', focus() {} }, reviewStatus: { textContent: '' },
+    currentWord: '사과', pendingReview: null, isSubmitted: false, isSubmitting: false,
+    checkAllCompleted: () => true, updateTeamStatus() {}, celebrateWordComplete() { celebrated++; }
+  });
+  await game.handleStudentSubmit();
+  assert.equal(calls.length, 0);
+  assert.match(game.reviewStatus.textContent, /숫자 5자리/);
+  game.reviewStudentId.value = '01234';
+  await game.handleStudentSubmit();
+  assert.equal(game.isSubmitted, false);
+  assert.match(game.reviewStatus.textContent, /확인 실패/);
+  await game.handleStudentSubmit();
+  assert.equal(game.isSubmitted, true);
+  assert.equal(celebrated, 1);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].studentId, '01234');
+  assert.equal(calls[0].word, '사과');
+  assert.equal(calls[0].requestId, calls[1].requestId);
+  assert.deepEqual(Object.keys(calls[0]).sort(), ['requestId', 'scriptId', 'studentId', 'word']);
 });

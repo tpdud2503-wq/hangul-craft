@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>복습 기록을 Google 시트에 연결하기</title>
+  <link rel="stylesheet" href="style.css?v=20261124-1">
+  <style>
+    .setup-page { max-width: 760px; width: 100%; display: flex; flex-direction: column; gap: 18px; }
+    .setup-card { background: #fff; border: 1.5px solid var(--border-ink); border-radius: 10px; padding: 20px; box-shadow: var(--shadow-subtle); }
+    .setup-card h1, .setup-card h2 { margin-bottom: 10px; }
+    .setup-card p, .setup-card li { margin: 8px 0; }
+    .setup-card ol { padding-left: 1.5em; }
+    .setup-card a { color: var(--royal-blue); }
+    .setup-card input, .setup-card textarea { display: block; width: 100%; padding: 9px; margin: 8px 0; border: 1px solid var(--border-light); border-radius: 6px; font: inherit; }
+    .setup-card textarea { min-height: 160px; font-family: monospace; font-size: 0.8rem; }
+    .setup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .setup-actions button, .setup-actions a { font: inherit; font-weight: 700; font-size: 0.9rem; padding: 8px 12px; border: 1.5px solid var(--border-ink); border-radius: 6px; background: #fff; color: var(--ink-black); cursor: pointer; text-decoration: none; }
+    .setup-actions .primary { background: var(--royal-blue); border-color: var(--royal-blue); color: #fff; }
+    .setup-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .setup-qr { display: flex; justify-content: center; margin: 12px 0; }
+    .setup-warning { padding: 12px; background: var(--royal-gold-light); border-left: 4px solid var(--royal-gold); }
+    .setup-status { color: var(--ink-gray); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <main class="setup-page">
+    <section class="setup-card">
+      <h1>📋 복습 기록을 구글 시트에 연결</h1>
+      <p>한 번 설정해 QR을 저장하면 교사 화면을 켜지 않아도 학생이 복습할 수 있습니다.</p>
+      <p class="setup-warning">시트에는 <strong>학번 5자리·완료 단어·완료 시각</strong>만 기록합니다. 학번도 개인정보이므로 시트 공유를 <strong>제한됨</strong>으로 두고 학교의 개인정보 처리 기준을 확인해 주세요. 학번만으로는 본인을 확인할 수 없어 허위·대리 제출이 가능하므로 평가용으로 사용하지 마세요.</p>
+      <p><a href="index.html#solo-qr-section">← 자율 복습으로 돌아가기</a></p>
+    </section>
+
+    <section class="setup-card">
+      <h2>1. 새 시트에 기록 수신기 만들기</h2>
+      <ol>
+        <li><a href="https://sheets.google.com/create" target="_blank" rel="noopener noreferrer">새 구글 스프레드시트</a>를 만들고 공유 설정을 <strong>제한됨</strong>으로 둡니다.</li>
+        <li>시트에서 <strong>확장 프로그램 → Apps Script</strong>를 엽니다. 새 스크립트의 내용을 지우고 아래 코드를 복사해 붙여 넣은 뒤 저장합니다.</li>
+        <li>함수 목록에서 <strong>initializeReviewSheet</strong>를 선택해 실행하고 필요한 권한을 승인합니다. 시트에 <strong>복습 기록</strong> 탭이 생깁니다.</li>
+      </ol>
+      <p class="setup-warning">이 코드는 구글 스프레드시트 읽기·쓰기 권한을 요청할 수 있습니다. 코드를 확인한 뒤 신뢰할 때만 승인하고, 필요하면 전용 계정을 사용하세요. 구글의 미검증 앱 경고나 학교 계정 정책으로 배포가 차단될 수 있습니다.</p>
+      <label for="review-script-source">복사할 Apps Script 코드</label>
+      <textarea id="review-script-source" readonly spellcheck="false">코드를 불러오는 중입니다...</textarea>
+      <div class="setup-actions"><button id="review-copy-script" type="button" disabled>코드 복사</button></div>
+      <p id="review-script-status" class="setup-status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="setup-card">
+      <h2>2. 웹 앱 배포 후 QR 만들기</h2>
+      <ol>
+        <li>Apps Script 오른쪽 위 <strong>배포 → 새 배포 → 웹 앱</strong>을 선택합니다.</li>
+        <li><strong>실행 사용자: 나</strong>, <strong>액세스 권한: 모든 사용자</strong>로 배포합니다. 웹 앱은 기록만 받고 시트 내용을 보여 주지 않습니다. 시트 자체의 공유 설정은 계속 <strong>제한됨</strong>이어야 합니다.</li>
+        <li><strong>직접 만든</strong> 웹 앱 URL(끝이 <code>/exec</code>)을 아래에 붙여 넣고 연동 QR을 만듭니다. 해당 웹 앱 소유자가 학번을 볼 수 있으므로 다른 사람의 URL을 사용하지 마세요. 구글 계정 비밀번호나 시트 주소는 입력하지 마세요.</li>
+      </ol>
+      <label for="review-webapp-url">Apps Script 웹 앱 URL</label>
+      <input id="review-webapp-url" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec">
+      <div class="setup-actions"><button id="review-create-qr" class="primary" type="button">시트 연동 QR 만들기</button></div>
+      <p id="review-setup-status" class="setup-status" role="status" aria-live="polite"></p>
+      <div id="review-qr-result" class="hidden">
+        <div id="review-qr" class="setup-qr"></div>
+        <label for="review-share-url">학생에게 공유할 복습 주소</label>
+        <input id="review-share-url" type="text" readonly>
+        <div class="setup-actions">
+          <a id="review-open" class="primary" href="student.html?mode=solo">학생 화면 열기</a>
+          <button id="review-copy-url" type="button">주소 복사</button>
+          <button id="review-download" type="button">QR 이미지 저장</button>
+        </div>
+        <p class="setup-status">학생은 이 연동 QR로 접속해야 시트에 기록됩니다. 연결 후 실제 학생 학번 대신 가상의 5자리로 테스트하고 테스트 행을 직접 지워 주세요.</p>
+      </div>
+    </section>
+  </main>
+  <script src="qrcode.min.js?v=20261124-1"></script>
+  <script src="qr-helper.js?v=20261124-1"></script>
+  <script src="review-recorder.js?v=20261124-1"></script>
+  <script src="review-setup.js?v=20261124-1"></script>
+</body>
+</html>

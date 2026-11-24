@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261122-1">
+  <link rel="stylesheet" href="style.css?v=20261124-1">
   <script>
     // 스마트 리다이렉트: URL에 방 코드(?room=)가 있으면 학생이 QR을 찍고 온 것이므로 student.html로 자동 이동
     (function() {
@@ -165,7 +165,7 @@
 
     <div class="hub-cards-grid">
       <!-- 교사용 -->
-      <a href="teacher.html?v=20261122-1" class="hub-role-card teacher-card">
+      <a href="teacher.html?v=20261124-1" class="hub-role-card teacher-card">
         <span class="role-icon">👨‍🏫</span>
         <div class="role-title">선생님 (수업 진행)</div>
         <div class="role-desc">
@@ -177,7 +177,7 @@
       </a>
 
       <!-- 학생용 -->
-      <a href="student.html?v=20261122-1" class="hub-role-card student-card">
+      <a href="student.html?v=20261124-1" class="hub-role-card student-card">
         <span class="role-icon">🎓</span>
         <div class="role-title">학생 (게임 플레이)</div>
         <div class="role-desc">
@@ -190,13 +190,14 @@
     </div>
 
     <section id="solo-qr-section" class="hub-self-study" aria-labelledby="solo-qr-title">
-      <h2 id="solo-qr-title">🧭 혼자서 자율 연습</h2>
-      <p>교사 화면이나 방 코드 없이 기본 문제를 시간 제한 없이 풀 수 있습니다.<br>수업방 점수와는 별개이며 풀이 기록은 저장되지 않습니다.</p>
+      <h2 id="solo-qr-title">🧭 혼자서 복습하기</h2>
+      <p>교사 화면이나 방 코드 없이 별도의 복습 문제를 시간 제한 없이 풀 수 있습니다.<br>아래 기본 QR은 기록을 저장하지 않습니다. 구글 시트 기록은 별도의 연동 QR을 만들어 주세요.</p>
       <div id="solo-qr" class="hub-self-qr"></div>
       <label for="solo-address">학생 자율 연습 주소</label>
       <input id="solo-address" class="hub-self-address" type="text" readonly>
       <div class="hub-self-actions">
         <a id="solo-open" href="student.html?mode=solo">혼자 연습 시작 ➔</a>
+        <a href="review-setup.html">구글 시트 연동 QR 만들기</a>
         <button id="solo-copy" type="button">주소 복사</button>
         <button id="solo-download" type="button">QR 이미지 저장</button>
       </div>
@@ -209,8 +210,8 @@
       <p class="copyright">“지혜로운 사람은 아침나절에 깨치고, 어리석은 사람도 열흘이면 배울 수 있다.” — 정인지 서문</p>
     </div>
   </div>
-  <script src="qrcode.min.js?v=20261122-1"></script>
-  <script src="qr-helper.js?v=20261122-1"></script>
-  <script src="practice-qr.js?v=20261122-1"></script>
+  <script src="qrcode.min.js?v=20261124-1"></script>
+  <script src="qr-helper.js?v=20261124-1"></script>
+  <script src="practice-qr.js?v=20261124-1"></script>
 </body>
 </html>
