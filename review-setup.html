@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>복습 기록을 Google 시트에 연결하기</title>
-  <link rel="stylesheet" href="style.css?v=20261128-1">
+  <link rel="stylesheet" href="style.css?v=20261128-2">
   <style>
     .setup-page { max-width: 760px; width: 100%; display: flex; flex-direction: column; gap: 18px; }
     .setup-card { background: #fff; border: 1.5px solid var(--border-ink); border-radius: 10px; padding: 20px; box-shadow: var(--shadow-subtle); }
@@ -28,7 +28,7 @@
     <section class="setup-card">
       <h1>📋 복습 기록을 구글 시트에 연결</h1>
       <p>한 번 설정해 QR을 저장하면 교사 화면을 켜지 않아도 학생이 복습할 수 있습니다.</p>
-      <p class="setup-warning">시트에는 <strong>학번 5자리·완료 단어·완료 시각</strong>만 기록합니다. 학번도 개인정보이므로 시트 공유를 <strong>제한됨</strong>으로 두고 학교의 개인정보 처리 기준을 확인해 주세요. 학번만으로는 본인을 확인할 수 없어 허위·대리 제출이 가능하므로 평가용으로 사용하지 마세요.</p>
+      <p class="setup-warning">9문제를 모두 완성하면 시트에 <strong>학번 5자리·완료 표시·완료 시각</strong>이 한 행 기록됩니다. 기존 연동을 유지하기 위해 완료 표시는 ‘우리말’로 저장됩니다. 학생은 QR을 다시 열어 업데이트된 화면을 사용해야 하며, 이전 화면의 ‘우리말’ 행은 전체 완료 여부를 알 수 없습니다. 학번도 개인정보이므로 시트 공유를 <strong>제한됨</strong>으로 두고 학교의 개인정보 처리 기준을 확인해 주세요. 학번만으로는 본인을 확인할 수 없어 허위·대리 제출이 가능하므로 평가용으로 사용하지 마세요.</p>
       <p><a href="index.html#solo-qr-section">← 자율 복습으로 돌아가기</a></p>
     </section>
 
@@ -70,9 +70,9 @@
       </div>
     </section>
   </main>
-  <script src="qrcode.min.js?v=20261128-1"></script>
-  <script src="qr-helper.js?v=20261128-1"></script>
-  <script src="review-recorder.js?v=20261128-1"></script>
-  <script src="review-setup.js?v=20261128-1"></script>
+  <script src="qrcode.min.js?v=20261128-2"></script>
+  <script src="qr-helper.js?v=20261128-2"></script>
+  <script src="review-recorder.js?v=20261128-2"></script>
+  <script src="review-setup.js?v=20261128-2"></script>
 </body>
 </html>

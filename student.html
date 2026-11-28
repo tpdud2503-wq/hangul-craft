@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261128-1">
+  <link rel="stylesheet" href="style.css?v=20261128-2">
   <script>
     window.isSelfStudy = new URLSearchParams(window.location.search).get('mode') === 'solo';
     if (window.isSelfStudy) document.documentElement.classList.add('self-study-mode');
@@ -80,16 +80,17 @@
     <section id="self-study-controls" class="self-study-controls hidden" aria-label="자율 연습 문제 선택">
       <div class="self-study-intro">
         <strong>🧭 혼자서 복습하기</strong>
-        <p>교사나 방 코드 없이 시간 제한 없이 복습해 보세요.</p>
+        <p>문제를 완성하면 다음 문제로 넘어갑니다. 새로고침하면 진행 상태가 초기화됩니다.</p>
       </div>
       <div id="review-id-controls" class="review-id-controls hidden">
         <label for="review-student-id">학번:</label>
         <input id="review-student-id" type="text" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="off" placeholder="숫자 5자리" aria-describedby="review-record-status">
       </div>
       <p id="review-record-status" class="review-record-status" role="status" aria-live="polite"></p>
+      <p id="self-study-progress" class="review-record-status" role="status" aria-live="polite">완료 0 / 9문제</p>
       <label for="self-study-select">문제 선택:</label>
       <select id="self-study-select" class="stage-dropdown"></select>
-      <button id="self-study-reset" class="action-small-btn" type="button">다시 풀기</button>
+      <button id="self-study-reset" class="action-small-btn" type="button">현재 문제 다시 풀기</button>
       <a href="student.html">모둠 게임 입장</a>
     </section>
 
@@ -368,12 +369,12 @@
   </div>
 
   <!-- 스크립트 연결 -->
-  <script src="room-state.js?v=20261128-1"></script>
-  <script src="cloud-sync.js?v=20261128-1"></script>
-  <script src="hangul-engine.js?v=20261128-1"></script>
-  <script src="sound-engine.js?v=20261128-1"></script>
-  <script src="team-manager.js?v=20261128-1"></script>
-  <script src="review-recorder.js?v=20261128-1"></script>
-  <script src="student.js?v=20261128-1"></script>
+  <script src="room-state.js?v=20261128-2"></script>
+  <script src="cloud-sync.js?v=20261128-2"></script>
+  <script src="hangul-engine.js?v=20261128-2"></script>
+  <script src="sound-engine.js?v=20261128-2"></script>
+  <script src="team-manager.js?v=20261128-2"></script>
+  <script src="review-recorder.js?v=20261128-2"></script>
+  <script src="student.js?v=20261128-2"></script>
 </body>
 </html>

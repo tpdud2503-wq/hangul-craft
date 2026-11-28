@@ -41,6 +41,8 @@ class StudentGame {
     this.selfStudyLesson = this.isSelfStudy ? window.RoomState.createReviewLessonState() : null;
     this.reviewConfig = this.isSelfStudy ? window.ReviewRecorder.config(window.location.search) : null;
     this.pendingReview = null;
+    this.completedReviewIds = new Set();
+    this.reviewOwnerId = null;
     const lesson = this.getLessonState();
     this.currentStageIdx = 0;
     this.currentMissionId = lesson.missions[0].id;
@@ -53,7 +55,7 @@ class StudentGame {
     this.consonantSlots = [];
     this.activeConsonantIdx = 0;
     this.vowelSlots = [];
-    this.nextSyllableTimer = null;
+    this.tabSwitchTimer = null;
 
     this.initDOM();
     if (this.isSelfStudy) this.initSelfStudy();
@@ -84,6 +86,7 @@ class StudentGame {
     this.reviewIdControls = document.getElementById('review-id-controls');
     this.reviewStudentId = document.getElementById('review-student-id');
     this.reviewStatus = document.getElementById('review-record-status');
+    this.selfStudyProgress = document.getElementById('self-study-progress');
     this.selectionKey = `hangul_student_selection_${window.cloudSync && window.cloudSync.roomId || 'local'}`;
     this.selectMyTeam = document.getElementById('select-my-team');
     this.selectMyMember = document.getElementById('select-my-member');
@@ -155,13 +158,35 @@ class StudentGame {
     });
     if (this.reviewConfig.status === 'ready') {
       this.reviewIdControls.classList.remove('hidden');
-      this.reviewStatus.textContent = '학번 5자리와 완료한 단어·완료 시각이 선생님의 시트에 기록됩니다. 이름은 입력하지 마세요.';
+      this.reviewStatus.textContent = '모든 문제를 완성하면 학번 5자리와 완료 시각이 기록됩니다. 이름은 입력하지 마세요.';
     } else if (this.reviewConfig.status === 'invalid') {
       this.reviewStatus.textContent = '시트 연동 QR이 올바르지 않습니다. 선생님께 새 QR을 요청해 주세요.';
     } else {
       this.reviewStatus.textContent = '이 QR은 기록을 저장하지 않습니다. 저장하려면 선생님의 시트 연동 QR로 접속하세요.';
     }
+    this.updateSelfStudyProgress();
     this.selfStudyControls.classList.remove('hidden');
+  }
+
+  updateSelfStudyProgress() {
+    const total = this.selfStudyLesson.missions.length;
+    const done = this.completedReviewIds.size;
+    this.selfStudyProgress.textContent = `완료 ${done} / ${total}문제`;
+    this.selfStudyReset.textContent = done === total ? '전체 다시 풀기' : '현재 문제 다시 풀기';
+  }
+
+  resetSelfStudy() {
+    if (this.isSubmitting) return;
+    if (this.completedReviewIds.size === this.selfStudyLesson.missions.length) {
+      if (!window.confirm('모든 문제를 처음부터 다시 풀까요? 현재 진행 상태가 초기화됩니다.')) return;
+      this.completedReviewIds.clear();
+      this.isSubmitted = false;
+      this.pendingReview = null;
+      this.loadStage(0, false);
+      this.updateSelfStudyProgress();
+      return;
+    }
+    this.selectSelfStudyStage(this.currentStageIdx, true);
   }
 
   selectSelfStudyStage(index, retry = false) {
@@ -171,13 +196,42 @@ class StudentGame {
     }
     const hasProgress = this.syllables.some(syl => syl.completedCho || syl.completedJung || syl.completedJong) ||
       this.consonantSlots.length > 0 || this.vowelSlots.length > 0;
-    const unsavedReview = this.reviewConfig && this.reviewConfig.status === 'ready' && !this.isSubmitted;
-    if (hasProgress && (retry || !this.checkAllCompleted() || unsavedReview) &&
+    const unrecordedCompletion = this.reviewConfig && this.reviewConfig.status === 'ready' && !this.isSubmitted &&
+      this.completedReviewIds.size === this.selfStudyLesson.missions.length;
+    if (hasProgress && (retry || !this.checkAllCompleted() || unrecordedCompletion) &&
         !window.confirm('현재 풀이가 초기화됩니다. 계속하시겠습니까?')) {
       this.selfStudySelect.value = this.currentStageIdx;
       return;
     }
     this.loadStage(index, false);
+  }
+
+  onReviewStudentIdInput() {
+    const digits = this.reviewStudentId.value.replace(/[^0-9]/g, '');
+    if (digits !== this.reviewStudentId.value) {
+      this.reviewStudentId.value = digits;
+      this.reviewStatus.textContent = '학번은 숫자 5자리만 입력해 주세요. 이름은 입력하지 마세요.';
+    }
+    if (digits.length !== 5) return;
+    const hasProgress = this.completedReviewIds.size > 0 ||
+      this.syllables.some(syl => syl.completedCho || syl.completedJung || syl.completedJong) ||
+      this.consonantSlots.length > 0 || this.vowelSlots.length > 0;
+    if (this.reviewOwnerId && this.reviewOwnerId !== digits && hasProgress) {
+      if (!window.confirm('학번을 바꾸면 복습을 처음부터 다시 풀어야 합니다. 계속하시겠습니까?')) {
+        this.reviewStudentId.value = this.reviewOwnerId;
+        return;
+      }
+      this.completedReviewIds.clear();
+      this.isSubmitted = false;
+      this.pendingReview = null;
+      this.reviewOwnerId = digits;
+      this.loadStage(0, false);
+      this.updateSelfStudyProgress();
+      return;
+    }
+    this.reviewOwnerId = digits;
+    if (this.reviewConfig.status === 'ready' && this.completedReviewIds.size === this.selfStudyLesson.missions.length &&
+        this.checkAllCompleted() && !this.isSubmitting && !this.isSubmitted) this.handleStudentSubmit();
   }
 
   restoreStudentSelection() {
@@ -195,14 +249,8 @@ class StudentGame {
   bindEvents() {
     if (this.isSelfStudy) {
       this.selfStudySelect.addEventListener('change', () => this.selectSelfStudyStage(Number(this.selfStudySelect.value)));
-      this.selfStudyReset.addEventListener('click', () => this.selectSelfStudyStage(this.currentStageIdx, true));
-      this.reviewStudentId.addEventListener('input', () => {
-        const digits = this.reviewStudentId.value.replace(/[^0-9]/g, '');
-        if (digits !== this.reviewStudentId.value) {
-          this.reviewStudentId.value = digits;
-          this.reviewStatus.textContent = '학번은 숫자 5자리만 입력해 주세요. 이름은 입력하지 마세요.';
-        }
-      });
+      this.selfStudyReset.addEventListener('click', () => this.resetSelfStudy());
+      this.reviewStudentId.addEventListener('input', () => this.onReviewStudentIdInput());
     } else {
       this.roomForm.addEventListener('submit', event => {
         event.preventDefault();
@@ -216,8 +264,8 @@ class StudentGame {
         window.location.assign(url.toString());
       });
     }
-    this.tabConsonant.addEventListener('click', () => this.switchTab('consonant'));
-    this.tabVowel.addEventListener('click', () => this.switchTab('vowel'));
+    this.tabConsonant.addEventListener('click', () => { this.cancelTabSwitch(); this.switchTab('consonant'); });
+    this.tabVowel.addEventListener('click', () => { this.cancelTabSwitch(); this.switchTab('vowel'); });
 
     document.getElementById('btn-toggle-hint').addEventListener('click', () => {
       this.hintPanel.classList.toggle('hidden');
@@ -226,10 +274,6 @@ class StudentGame {
 
     this.btnNextStage.addEventListener('click', () => {
       this.modalComplete.classList.add('hidden');
-      if (this.isSelfStudy) {
-        if (this.currentStageIdx + 1 < this.selfStudyLesson.missions.length) this.selectSelfStudyStage(this.currentStageIdx + 1);
-        else this.selfStudySelect.focus();
-      }
     });
 
     // 제출 및 준비 완료 버튼 클릭
@@ -378,16 +422,20 @@ class StudentGame {
 
   updateTeamStatus() {
     if (this.isSelfStudy) {
-      const ready = this.checkAllCompleted() && !this.isSubmitting && !this.isSubmitted && this.reviewConfig.status !== 'invalid';
+      const total = this.selfStudyLesson.missions.length;
+      const allDone = this.completedReviewIds.size === total;
+      const ready = allDone && this.checkAllCompleted() && !this.isSubmitting && !this.isSubmitted && this.reviewConfig.status !== 'invalid';
       this.btnStudentSubmit.disabled = !ready;
       this.btnStudentSubmit.classList.toggle('ready-to-submit', ready);
       this.btnStudentSubmit.classList.remove('submitted');
       this.btnStudentSubmit.querySelector('.btn-submit-icon').textContent = this.isSubmitted ? '✅' : ready ? '🎉' : '⏳';
-      this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = this.isSubmitting ? '시트에 기록하는 중입니다...'
-        : this.isSubmitted ? '복습 기록 완료' : this.reviewConfig.status === 'invalid' ? '연동 QR을 확인해 주세요'
-        : ready ? this.reviewConfig.status === 'ready' ? '단어 완성! 시트에 기록하기' : '단어 완성! 확인하기'
-        : '모든 글자를 완성해 보세요';
-      this.selfStudySelect.disabled = this.isSubmitting;
+      let label = `전체 ${total}문제를 완성해 보세요`;
+      if (this.isSubmitting) label = '시트에 기록하는 중입니다...';
+      else if (this.isSubmitted) label = this.reviewConfig.status === 'ready' ? '복습 기록 완료' : '모든 문제 완료';
+      else if (this.reviewConfig.status === 'invalid') label = '연동 QR을 확인해 주세요';
+      else if (ready) label = this.reviewConfig.status === 'ready' ? '모든 문제 완료! 시트에 기록하기' : '모든 문제 완료! 확인하기';
+      this.btnStudentSubmit.querySelector('.btn-submit-text').textContent = label;
+      this.selfStudySelect.disabled = this.isSubmitting || this.isSubmitted;
       this.selfStudyReset.disabled = this.isSubmitting;
       this.reviewStudentId.disabled = this.isSubmitting;
       this.submitStatusMsg.classList.add('hidden');
@@ -487,9 +535,12 @@ class StudentGame {
 
   async handleStudentSubmit() {
     if (this.isSelfStudy) {
-      if (!this.checkAllCompleted() || this.isSubmitting || this.isSubmitted || this.reviewConfig.status === 'invalid') return;
+      if (this.completedReviewIds.size !== this.selfStudyLesson.missions.length || !this.checkAllCompleted() ||
+          this.isSubmitting || this.isSubmitted || this.reviewConfig.status === 'invalid') return;
       if (this.reviewConfig.status === 'none') {
+        this.isSubmitted = true;
         this.celebrateWordComplete();
+        this.updateTeamStatus();
         return;
       }
       const studentId = this.reviewStudentId.value.trim();
@@ -499,23 +550,30 @@ class StudentGame {
         return;
       }
       try {
-        if (!this.pendingReview || this.pendingReview.studentId !== studentId || this.pendingReview.word !== this.currentWord) {
-          this.pendingReview = { studentId, word: this.currentWord, requestId: window.ReviewRecorder.newRequestId() };
+        // 기존 Apps Script의 마지막 단어를 전체 완료 표시로 사용해 기존 QR을 유지한다.
+        const completionWord = this.selfStudyLesson.missions[this.selfStudyLesson.missions.length - 1].word;
+        if (!this.pendingReview || this.pendingReview.studentId !== studentId || this.pendingReview.word !== completionWord) {
+          this.pendingReview = { studentId, word: completionWord, requestId: window.ReviewRecorder.newRequestId() };
         }
         this.isSubmitting = true;
-        this.reviewStatus.textContent = '복습 기록을 전송하고 있습니다...';
+        this.reviewStatus.textContent = '모든 문제를 완성했습니다. 복습 기록을 전송하고 있습니다...';
+        this.showToast('모든 문제를 완성했습니다. 기록을 저장하고 있어요.');
         this.updateTeamStatus();
         await window.ReviewRecorder.send({ scriptId: this.reviewConfig.scriptId, ...this.pendingReview });
         this.isSubmitted = true;
         this.pendingReview = null;
-        this.reviewStatus.textContent = '복습 기록이 시트에 저장되었습니다.';
-        this.celebrateWordComplete();
+        this.reviewStatus.textContent = '모든 복습 문제 완료가 시트에 기록되었습니다.';
       } catch (error) {
         this.reviewStatus.textContent = error.message || '저장을 확인하지 못했습니다. 다시 시도해 주세요.';
+        this.showToast('기록을 확인하지 못했습니다. 다시 시도해 주세요.');
+        if (this.btnStudentSubmit && typeof this.btnStudentSubmit.scrollIntoView === 'function') {
+          this.btnStudentSubmit.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       } finally {
         this.isSubmitting = false;
         this.updateTeamStatus();
       }
+      if (this.isSubmitted) this.celebrateWordComplete();
       return;
     }
     if (!this.checkAllCompleted() || this.isSubmitted || this.isSubmitting ||
@@ -566,7 +624,7 @@ class StudentGame {
     const lesson = this.getLessonState();
     const mission = lesson.missions[idx];
     if (!mission) return;
-    if (this.nextSyllableTimer) clearTimeout(this.nextSyllableTimer);
+    this.cancelTabSwitch();
     const choice = document.getElementById('chochul-choice-overlay');
     if (choice) choice.remove();
     this.currentStageIdx = idx;
@@ -576,10 +634,10 @@ class StudentGame {
     if (this.isSelfStudy) {
       this.selfStudySelect.value = idx;
       if (this.reviewConfig.status === 'ready') {
-        this.reviewStatus.textContent = '학번 5자리와 완료한 단어·완료 시각이 선생님의 시트에 기록됩니다. 이름은 입력하지 마세요.';
+        this.reviewStatus.textContent = '모든 문제를 완성하면 학번 5자리와 완료 시각이 기록됩니다. 이름은 입력하지 마세요.';
       }
     }
-    this.pendingReview = null;
+    if (!this.isSelfStudy || this.completedReviewIds.size < this.selfStudyLesson.missions.length) this.pendingReview = null;
 
     this.isSubmitted = false;
     if (this.btnStudentSubmit) {
@@ -686,27 +744,26 @@ class StudentGame {
         if (!syl.isDone) {
           syl.isDone = true;
           this.clearConsonantWorkbench();
+          this.cancelTabSwitch();
+          this.switchTab('consonant');
           this.activeCharPreviewEl.classList.add('match-success');
           window.soundEngine.playPyeongyeong(880);
           this.renderWordCards();
 
           if (this.checkAllCompleted()) {
             if (!this.isSubmitted && this.btnStudentSubmit) {
-              this.showToast(this.isSelfStudy ? '단어를 완성했습니다! 완성 확인을 눌러 주세요. 🎉'
-                : '단어를 완성했습니다! 시작된 문제라면 아래 제출 버튼을 눌러 주세요. 🎉');
               window.soundEngine.playWordComplete();
+              if (this.isSelfStudy) this.completeSelfStudyWord();
+              else this.showToast('단어를 완성했습니다! 시작된 문제라면 아래 제출 버튼을 눌러 주세요. 🎉');
             }
           } else {
-            this.nextSyllableTimer = setTimeout(() => {
-              this.nextSyllableTimer = null;
-              const nextIdx = this.syllables.findIndex(s => !s.isDone);
-              if (nextIdx !== -1) {
-                this.activeSyllableIdx = nextIdx;
-                this.renderWordCards();
-                this.updateAssembly();
-                this.updateHints();
-              }
-            }, 600);
+            const nextIdx = this.syllables.findIndex(s => !s.isDone);
+            if (nextIdx !== -1) {
+              this.activeSyllableIdx = nextIdx;
+              this.renderWordCards();
+              this.updateAssembly();
+              this.updateHints();
+            }
           }
         }
       } else {
@@ -727,6 +784,28 @@ class StudentGame {
     return this.syllables.length > 0 && this.syllables.every(s => s.isDone);
   }
 
+  completeSelfStudyWord() {
+    const missions = this.selfStudyLesson.missions;
+    this.completedReviewIds.add(this.currentMissionId);
+    this.updateSelfStudyProgress();
+    if (this.completedReviewIds.size < missions.length) {
+      const next = missions.findIndex((mission, index) => index > this.currentStageIdx && !this.completedReviewIds.has(mission.id));
+      const remaining = next >= 0 ? next : missions.findIndex(mission => !this.completedReviewIds.has(mission.id));
+      this.showToast(`완성! 다음 문제 ‘${missions[remaining].word}’을 만들어 보세요. 🎉`);
+      this.loadStage(remaining, false);
+      return;
+    }
+    if (this.reviewConfig.status === 'none') {
+      this.handleStudentSubmit();
+    } else if (this.reviewConfig.status === 'ready') {
+      if (/^[0-9]{5}$/.test(this.reviewStudentId.value.trim())) this.handleStudentSubmit();
+      else {
+        this.reviewStatus.textContent = '모든 문제를 완성했습니다. 학번 5자리를 입력하면 기록됩니다.';
+        this.reviewStudentId.focus();
+      }
+    }
+  }
+
   celebrateWordComplete() {
     window.soundEngine.playWordComplete();
 
@@ -735,16 +814,17 @@ class StudentGame {
     const modalStory = document.getElementById('modal-complete-story');
     const modalTeamInfo = document.getElementById('modal-complete-team-info');
 
-    modalTitle.textContent = `경축! ‘${this.currentWord}’ 창제 완성`;
-    modalWord.textContent = this.currentWord;
-    modalStory.textContent = this.currentStageData.story;
-
     if (this.isSelfStudy) {
+      modalTitle.textContent = '🎉 모든 복습 문제 완성!';
+      modalWord.textContent = `${this.selfStudyLesson.missions.length}문제 완성`;
+      modalStory.textContent = '모든 복습 문제를 끝까지 풀었습니다.';
       modalTeamInfo.textContent = this.reviewConfig.status === 'ready'
-        ? '학번과 복습 완료 기록이 시트에 저장되었습니다.' : '이 QR은 복습 기록을 저장하지 않습니다.';
-      this.btnNextStage.textContent = this.currentStageIdx + 1 < this.selfStudyLesson.missions.length
-        ? '다음 문제 풀기 ➔' : '다른 문제 고르기';
+        ? '학번과 전체 복습 완료 기록이 시트에 저장되었습니다.' : '이 QR은 복습 기록을 저장하지 않습니다.';
+      this.btnNextStage.textContent = '닫기';
     } else {
+      modalTitle.textContent = `경축! ‘${this.currentWord}’ 창제 완성`;
+      modalWord.textContent = this.currentWord;
+      modalStory.textContent = this.currentStageData.story;
       const cur = window.teamManager.currentStudent;
       const team = window.teamManager.teams.find(t => t.id === cur.teamId);
       if (team) {
@@ -882,7 +962,7 @@ class StudentGame {
         this.clearConsonantWorkbench();
         window.soundEngine.playGayageum(600);
         this.updateAssembly();
-        if (!syl.completedJung) setTimeout(() => this.switchTab('vowel'), 250);
+        if (!syl.completedJung) this.scheduleTabSwitch('vowel');
       } else {
         window.soundEngine.playMoktak();
       }
@@ -1094,8 +1174,21 @@ class StudentGame {
       this.clearVowelWorkbench();
       window.soundEngine.playGayageum(640);
       this.updateAssembly();
-      if (syl.jong && !syl.completedJong) setTimeout(() => this.switchTab('consonant'), 250);
+      if (syl.jong && !syl.completedJong) this.scheduleTabSwitch('consonant');
     }
+  }
+
+  cancelTabSwitch() {
+    if (this.tabSwitchTimer != null) clearTimeout(this.tabSwitchTimer);
+    this.tabSwitchTimer = null;
+  }
+
+  scheduleTabSwitch(tab) {
+    this.cancelTabSwitch();
+    this.tabSwitchTimer = setTimeout(() => {
+      this.tabSwitchTimer = null;
+      this.switchTab(tab);
+    }, 250);
   }
 
   switchTab(tab) {
