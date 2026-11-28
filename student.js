@@ -53,7 +53,6 @@ class StudentGame {
     this.consonantSlots = [];
     this.activeConsonantIdx = 0;
     this.vowelSlots = [];
-    this.vowelReserve = null;
     this.nextSyllableTimer = null;
 
     this.initDOM();
@@ -143,9 +142,6 @@ class StudentGame {
     this.submitTeamStatusText = document.getElementById('submit-team-status-text');
     this.teamRankBanner = document.getElementById('team-rank-banner');
     this.finalResultBanner = document.getElementById('student-final-result');
-    this.vReserveStatus = document.getElementById('v-reserve-status');
-    this.btnSaveVowel = document.getElementById('btn-save-vowel');
-    this.btnRestoreVowel = document.getElementById('btn-restore-vowel');
     this.isSubmitted = false;
     this.isSubmitting = false;
   }
@@ -173,7 +169,8 @@ class StudentGame {
       this.selfStudySelect.value = this.currentStageIdx;
       return;
     }
-    const hasProgress = this.syllables.some(syl => syl.completedCho || syl.completedJung || syl.completedJong);
+    const hasProgress = this.syllables.some(syl => syl.completedCho || syl.completedJung || syl.completedJong) ||
+      this.consonantSlots.length > 0 || this.vowelSlots.length > 0;
     const unsavedReview = this.reviewConfig && this.reviewConfig.status === 'ready' && !this.isSubmitted;
     if (hasProgress && (retry || !this.checkAllCompleted() || unsavedReview) &&
         !window.confirm('현재 풀이가 초기화됩니다. 계속하시겠습니까?')) {
@@ -279,8 +276,6 @@ class StudentGame {
     this.btnJaechul.addEventListener('click', () => this.actionJaechul());
     this.btnHapseong.addEventListener('click', () => this.actionHapseong());
     this.btnClearV.addEventListener('click', () => this.clearVowelWorkbench());
-    this.btnSaveVowel.addEventListener('click', () => this.saveVowel());
-    this.btnRestoreVowel.addEventListener('click', () => this.restoreVowel());
 
     this.btnSendJung.addEventListener('click', () => this.sendVowel());
 
@@ -572,6 +567,8 @@ class StudentGame {
     const mission = lesson.missions[idx];
     if (!mission) return;
     if (this.nextSyllableTimer) clearTimeout(this.nextSyllableTimer);
+    const choice = document.getElementById('chochul-choice-overlay');
+    if (choice) choice.remove();
     this.currentStageIdx = idx;
     this.currentMissionId = mission.id;
     this.currentStageData = describeMission(lesson, idx);
@@ -882,6 +879,7 @@ class StudentGame {
     if (slotType === 'cho') {
       if (window.HangulEngine.CHOSUNG.includes(char)) {
         syl.completedCho = char;
+        this.clearConsonantWorkbench();
         window.soundEngine.playGayageum(600);
         this.updateAssembly();
         if (!syl.completedJung) setTimeout(() => this.switchTab('vowel'), 250);
@@ -894,6 +892,7 @@ class StudentGame {
         window.soundEngine.playMoktak();
       } else if (char === 'ㆁ' || window.HangulEngine.JONGSUNG.includes(char)) {
         syl.completedJong = char;
+        this.clearConsonantWorkbench();
         window.soundEngine.playGayageum(500);
         this.updateAssembly();
       } else {
@@ -904,24 +903,21 @@ class StudentGame {
 
   // 모음 로직
   addVowel(char) {
-    if (this.vowelSlots.length >= 2) {
-      this.vowelSlots[0] = this.vowelSlots[1];
-      this.vowelSlots[1] = char;
-    } else {
-      this.vowelSlots.push(char);
+    if (this.vowelSlots.length >= 3) {
+      this.showToast('작업대의 글자를 합치거나 눌러 지운 뒤 계속해 주세요.');
+      window.soundEngine.playMoktak();
+      return;
     }
+    this.vowelSlots.push(char);
     window.soundEngine.playBuk();
     this.renderVowelWorkbench();
   }
 
   renderVowelWorkbench() {
-    this.vReserveStatus.textContent = this.vowelReserve || '비어 있음';
-    this.btnSaveVowel.disabled = Boolean(this.vowelReserve) || this.vowelSlots.length !== 1 ||
-      !window.HangulEngine.JUNGSUNG.includes(this.vowelSlots[0]);
-    this.btnRestoreVowel.disabled = !this.vowelReserve || this.vowelSlots.length > 1;
     this.vSlotsContainerEl.innerHTML = '';
     if (this.vowelSlots.length === 0) {
       this.vSlotsContainerEl.innerHTML = '<span class="empty-hint">위의 삼재 기본자(ㆍ, ㅡ, ㅣ)를 누르세요</span>';
+      this.vPrincipleInfoEl.textContent = '삼재 기본자를 선택하여 모음을 만들어 보세요.';
       this.btnChochul.disabled = true;
       this.btnJaechul.disabled = true;
       this.btnHapseong.disabled = true;
@@ -929,16 +925,24 @@ class StudentGame {
       return;
     }
 
-    this.vowelSlots.forEach(char => {
-      const slot = document.createElement('div');
-      slot.className = 'workbench-chip active';
+    this.vowelSlots.forEach((char, index) => {
+      const slot = document.createElement('button');
+      slot.type = 'button';
+      slot.className = 'workbench-chip active vowel-chip';
       slot.textContent = char;
+      slot.setAttribute('aria-label', `${char} 지우기`);
+      slot.addEventListener('click', () => {
+        this.vowelSlots.splice(index, 1);
+        this.renderVowelWorkbench();
+        window.soundEngine.playMoktak();
+      });
       this.vSlotsContainerEl.appendChild(slot);
     });
 
+    const pair = this.vowelSlots.slice(-2);
     let canChochul = false;
-    if (this.vowelSlots.length === 2) {
-      const [v1, v2] = this.vowelSlots;
+    if (pair.length === 2) {
+      const [v1, v2] = pair;
       canChochul = window.HangulEngine.CHOCHUL_RULES.some(r =>
         (r.ingredients[0] === v1 && r.ingredients[1] === v2) ||
         (r.ingredients[0] === v2 && r.ingredients[1] === v1)
@@ -946,31 +950,28 @@ class StudentGame {
     }
     this.btnChochul.disabled = !canChochul;
 
-    let canJaechul = false;
-    if (this.vowelSlots.length === 2) {
-      const [v1, v2] = this.vowelSlots;
-      canJaechul = (v2 === 'ㆍ' && ['ㅗ','ㅜ','ㅏ','ㅓ'].includes(v1)) ||
-                   (v1 === 'ㆍ' && ['ㅗ','ㅜ','ㅏ','ㅓ'].includes(v2));
-    } else if (this.vowelSlots.length === 1) {
-      canJaechul = ['ㅗ','ㅜ','ㅏ','ㅓ'].includes(this.vowelSlots[0]);
-    }
+    const canJaechul = Boolean(this.getJaechulSource());
     this.btnJaechul.disabled = !canJaechul;
 
     let canHapseong = false;
-    if (this.vowelSlots.length === 2) {
-      const combo1 = `${this.vowelSlots[0]}+${this.vowelSlots[1]}`;
-      const combo2 = `${this.vowelSlots[1]}+${this.vowelSlots[0]}`;
+    if (pair.length === 2) {
+      const combo1 = `${pair[0]}+${pair[1]}`;
+      const combo2 = `${pair[1]}+${pair[0]}`;
       canHapseong = !!(window.HangulEngine.VOWEL_COMBINATIONS[combo1] || window.HangulEngine.VOWEL_COMBINATIONS[combo2]);
     }
     this.btnHapseong.disabled = !canHapseong;
 
     this.btnSendJung.disabled = !(this.vowelSlots.length === 1 && window.HangulEngine.JUNGSUNG.includes(this.vowelSlots[0]));
+    this.vPrincipleInfoEl.textContent = this.vowelSlots.length === 3
+      ? `‘${this.vowelSlots[0]}’은 그대로 두고 오른쪽 두 글자를 먼저 만드세요.`
+      : canHapseong ? '두 모음이 준비됐습니다. 모음 합성을 눌러 보세요.'
+      : canChochul ? '초출 합성을 눌러 만들 모음을 선택하세요.'
+      : '모음을 만들거나 기본자를 더 눌러 두 번째 모음을 만드세요.';
   }
 
   actionChochul() {
     if (this.vowelSlots.length < 2) return;
-    const v1 = this.vowelSlots[0];
-    const v2 = this.vowelSlots[1];
+    const [v1, v2] = this.vowelSlots.slice(-2);
     const hasCheon = (v1 === 'ㆍ' || v2 === 'ㆍ');
     const hasJi = (v1 === 'ㅡ' || v2 === 'ㅡ');
     const hasIn = (v1 === 'ㅣ' || v2 === 'ㅣ');
@@ -988,9 +989,23 @@ class StudentGame {
     }
   }
 
+  applyChochulChoice(char) {
+    const pair = this.vowelSlots.slice(-2);
+    const valid = pair.length === 2 && window.HangulEngine.CHOCHUL_RULES.some(rule => rule.result === char &&
+      ((rule.ingredients[0] === pair[0] && rule.ingredients[1] === pair[1]) ||
+       (rule.ingredients[0] === pair[1] && rule.ingredients[1] === pair[0])));
+    if (!valid) return;
+    this.vowelSlots.splice(-2, 2, char);
+    window.soundEngine.playPyeongyeong(820);
+    this.renderVowelWorkbench();
+  }
+
   promptChochulChoice(options) {
     const existing = document.getElementById('chochul-choice-overlay');
     if (existing) existing.remove();
+    const before = this.vowelSlots.join('|');
+    const stage = this.currentStageIdx;
+    const syllable = this.activeSyllableIdx;
 
     const overlay = document.createElement('div');
     overlay.id = 'chochul-choice-overlay';
@@ -1012,33 +1027,43 @@ class StudentGame {
             </button>
           `).join('')}
         </div>
+        <div style="text-align: center; margin-top: 12px;">
+          <button type="button" class="small-clear-btn" id="btn-cancel-chochul">취소</button>
+        </div>
       </div>
     `;
 
     overlay.querySelectorAll('.choice-option-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const char = e.currentTarget.dataset.char;
-        this.vowelSlots = [char];
-        window.soundEngine.playPyeongyeong(820);
-        this.renderVowelWorkbench();
+        if (this.currentStageIdx === stage && this.activeSyllableIdx === syllable && this.vowelSlots.join('|') === before) {
+          this.applyChochulChoice(char);
+        }
         overlay.remove();
       });
     });
 
+    overlay.querySelector('#btn-cancel-chochul').addEventListener('click', () => overlay.remove());
+
     document.body.appendChild(overlay);
   }
 
-  actionJaechul() {
-    let baseChar = '';
-    if (this.vowelSlots.length === 2) {
-      if (this.vowelSlots[0] === 'ㆍ') baseChar = this.vowelSlots[1];
-      else if (this.vowelSlots[1] === 'ㆍ') baseChar = this.vowelSlots[0];
-    } else if (this.vowelSlots.length === 1) {
-      baseChar = this.vowelSlots[0];
+  getJaechulSource() {
+    const pair = this.vowelSlots.slice(-2);
+    if (pair.length === 2 && (pair[0] === 'ㆍ' || pair[1] === 'ㆍ')) {
+      const base = pair[0] === 'ㆍ' ? pair[1] : pair[0];
+      const rule = window.HangulEngine.JAECHUL_RULES.find(item => item.base === base);
+      if (rule) return { rule, count: 2 };
     }
-    const rule = window.HangulEngine.JAECHUL_RULES.find(r => r.base === baseChar);
-    if (rule) {
-      this.vowelSlots = [rule.result];
+    const last = this.vowelSlots[this.vowelSlots.length - 1];
+    const rule = window.HangulEngine.JAECHUL_RULES.find(item => item.base === last);
+    return rule ? { rule, count: 1 } : null;
+  }
+
+  actionJaechul() {
+    const source = this.getJaechulSource();
+    if (source) {
+      this.vowelSlots.splice(-source.count, source.count, source.rule.result);
       window.soundEngine.playPyeongyeong(880);
       this.renderVowelWorkbench();
     }
@@ -1046,11 +1071,10 @@ class StudentGame {
 
   actionHapseong() {
     if (this.vowelSlots.length < 2) return;
-    const v1 = this.vowelSlots[0];
-    const v2 = this.vowelSlots[1];
+    const [v1, v2] = this.vowelSlots.slice(-2);
     const result = window.HangulEngine.VOWEL_COMBINATIONS[`${v1}+${v2}`] || window.HangulEngine.VOWEL_COMBINATIONS[`${v2}+${v1}`];
     if (result) {
-      this.vowelSlots = [result];
+      this.vowelSlots.splice(-2, 2, result);
       window.soundEngine.playPyeongyeong(840);
       this.renderVowelWorkbench();
     }
@@ -1058,21 +1082,6 @@ class StudentGame {
 
   clearVowelWorkbench() {
     this.vowelSlots = [];
-    this.vowelReserve = null;
-    this.renderVowelWorkbench();
-  }
-
-  saveVowel() {
-    if (this.btnSaveVowel.disabled) return;
-    this.vowelReserve = this.vowelSlots[0];
-    this.vowelSlots = [];
-    this.renderVowelWorkbench();
-  }
-
-  restoreVowel() {
-    if (this.btnRestoreVowel.disabled) return;
-    this.vowelSlots.push(this.vowelReserve);
-    this.vowelReserve = null;
     this.renderVowelWorkbench();
   }
 
@@ -1082,6 +1091,7 @@ class StudentGame {
     const syl = this.getCurrentSyllable();
     if (window.HangulEngine.JUNGSUNG.includes(char)) {
       syl.completedJung = char;
+      this.clearVowelWorkbench();
       window.soundEngine.playGayageum(640);
       this.updateAssembly();
       if (syl.jong && !syl.completedJong) setTimeout(() => this.switchTab('consonant'), 250);

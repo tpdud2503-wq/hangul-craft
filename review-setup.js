@@ -23,7 +23,7 @@
     }
   }
 
-  fetch('review-sheet.gs?v=20261124-1').then(response => {
+  fetch('review-sheet.gs?v=20261128-1').then(response => {
     if (!response.ok) throw new Error('not found');
     return response.text();
   }).then(source => {
